@@ -156,7 +156,7 @@ export default function Home() {
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileSidebar ? 'open' : ''}`}>
-      <div className="brand-block"><div className="brand-top"><img src="./branding/logo.png" alt="Client logo" onError={event => { event.currentTarget.style.display = 'none'; }} /><div><strong>{displayName}</strong><small>{brand.tagline}</small></div></div></div>
+      <div className="brand-block"><div className="brand-top"><img src="./branding/logo.png" alt="Client logo" onError={event => { event.currentTarget.style.display = 'none'; }} /><div className="brand-copy"><strong title={displayName}>{displayName}</strong><small title={brand.tagline}>{brand.tagline}</small></div></div></div>
       <div className="sidebar-section-label">WORKSPACE</div>
       <nav className="sidebar-nav" aria-label="Main navigation">{navigation.map(({ id, label, Icon }) => <button key={id} onClick={() => navigate(id)} className={page === id ? 'active' : ''}><Icon size={21} strokeWidth={2.1} /><span>{label}</span></button>)}</nav>
       <div className="clean-sidebar-footer"><button onClick={signOut}><LogOut size={18} /> Log out</button></div>

@@ -1,0 +1,7 @@
+{
+  "clientId": "downtown-coffee-house",
+  "version": "1.1.12",
+  "type": "update",
+  "message": "Fixed one-click updates with automatic restart and improved sidebar branding.",
+  "date": "2026-09-30T13:45:50.160Z"
+}

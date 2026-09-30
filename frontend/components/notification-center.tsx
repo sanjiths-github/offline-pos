@@ -48,8 +48,10 @@ export default function NotificationCenter({ clientId, userId }: Props) {
   const [selected, setSelected] = useState<Notice | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [update, setUpdate] = useState<UpdateState>({ status: 'unavailable' });
+  const [manualUpdateRequested, setManualUpdateRequested] = useState(false);
   const knownIds = useRef<Set<string> | null>(null);
   const refreshBusy = useRef(false);
+  const updateClickBusy = useRef(false);
   const storageKey = 'pos-notification-read:' + clientId + ':' + userId;
   const hiddenStorageKey = 'pos-notification-hidden:' + clientId + ':' + userId;
   const readSet = new Set(readIds);
@@ -166,16 +168,19 @@ export default function NotificationCenter({ clientId, userId }: Props) {
   };
   const closeModal = () => { setSelected(null); setViewAll(false); };
   const startUpdate = async () => {
-    if (!window.posDesktop?.startUpdate) return;
+    if (!window.posDesktop?.startUpdate || updateClickBusy.current) return;
+    updateClickBusy.current = true;
+    setManualUpdateRequested(true);
     try { setUpdate(current => ({ ...current, status: 'checking', error: '' })); await window.posDesktop.startUpdate(); }
     catch (error) { setUpdate(current => ({ ...current, status: 'error', error: error instanceof Error ? error.message : 'Update failed' })); }
+    finally { updateClickBusy.current = false; setManualUpdateRequested(false); }
   };
   const installUpdate = async () => {
     try { await window.posDesktop?.installUpdate?.(); }
     catch (error) { setUpdate(current => ({ ...current, status: 'error', error: error instanceof Error ? error.message : 'Installation failed' })); }
   };
-  const updateLabel = update.status === 'downloaded' ? 'Restart & Update' : update.status === 'downloading' ? 'Downloading… ' + (update.progress || 0) + '%' : update.status === 'checking' ? 'Checking for update…' : selected?.buttonText || 'Update Now';
-  const updateBusy = ['checking', 'downloading', 'installing'].includes(update.status);
+  const updateLabel = update.status === 'installing' ? 'Restarting…' : update.status === 'downloaded' ? 'Restart & Update' : update.status === 'downloading' ? 'Downloading… ' + (update.progress || 0) + '%' : manualUpdateRequested ? 'Checking for update…' : selected?.buttonText || 'Update Now';
+  const updateBusy = manualUpdateRequested || ['downloading', 'installing'].includes(update.status);
   const desktopAvailable = typeof window !== 'undefined' && Boolean(window.posDesktop?.startUpdate);
   const newerThanInstalled = (target?: string | null) => {
     if (!target || !update.version) return true;

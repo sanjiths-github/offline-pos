@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const client = require('../branding/client.json');
+const { createUpdateFlow } = require('./update-flow.cjs');
 
 if (!/^[a-z0-9-]{3,50}$/.test(client.clientId || '')) throw new Error('A stable clientId is required in branding/client.json');
 const isDevelopment = !app.isPackaged;
@@ -22,7 +23,7 @@ let backendPort;
 let bluetoothSelection;
 let updateState = { status: 'unavailable', version: app.getVersion(), progress: 0, error: '' };
 let updater;
-let updateTask;
+let updateFlow;
 
 function clientFeedUrl(value) {
   if (!value) return null;
@@ -57,35 +58,40 @@ function setupUpdater() {
   updater.on('download-progress', progress => sendUpdateState('downloading', { progress: Math.round(progress.percent) }));
   updater.on('update-downloaded', info => sendUpdateState('downloaded', { progress: 100, availableVersion: info.version }));
   updater.on('error', error => sendUpdateState('error', { error: String(error.message || error) }));
+  updateFlow = createUpdateFlow({
+    readRelease: async () => {
+      const feed = clientFeedUrl(client.updateFeedUrl);
+      const manifestUrl = new URL('release.json', feed.href.endsWith('/') ? feed.href : feed.href + '/');
+      const response = await fetch(manifestUrl, { headers: clientFeedHeaders(manifestUrl), signal: AbortSignal.timeout(8000), cache: 'no-store' });
+      if (!response.ok) throw new Error(`Release metadata returned ${response.status}`);
+      const manifest = await response.json();
+      const expectedAppId = `com.localpos.${client.clientId.replaceAll('-', '')}`;
+      if (manifest.clientId !== client.clientId || manifest.appId !== expectedAppId || typeof manifest.version !== 'string') {
+        throw new Error('Update feed belongs to another client');
+      }
+      return manifest;
+    },
+    check: () => updater.checkForUpdates(),
+    download: () => updater.downloadUpdate(),
+    state: () => updateState,
+    error: error => sendUpdateState('error', { error: String(error.message || error) }),
+    install: installDownloadedUpdate
+  });
   sendUpdateState('idle');
   setTimeout(() => checkForUpdate(false).catch(error => console.error('[POS update]', error)), 15_000);
 }
 
-async function checkForUpdate(download) {
-  if (!updater) return updateState;
-  if (updateTask) return updateTask;
-  updateTask = (async () => {
-    const feed = clientFeedUrl(client.updateFeedUrl);
-    const manifestUrl = new URL('release.json', feed.href.endsWith('/') ? feed.href : feed.href + '/');
-    const manifestResponse = await fetch(manifestUrl, { headers: clientFeedHeaders(manifestUrl), signal: AbortSignal.timeout(8000), cache: 'no-store' });
-    if (!manifestResponse.ok) throw new Error(`Release metadata returned ${manifestResponse.status}`);
-    const manifest = await manifestResponse.json();
-    const expectedAppId = `com.localpos.${client.clientId.replaceAll('-', '')}`;
-    if (manifest.clientId !== client.clientId || manifest.appId !== expectedAppId || typeof manifest.version !== 'string') {
-      throw new Error('Update feed belongs to another client');
-    }
-    const result = await updater.checkForUpdates();
-    if (updateState.status === 'available' && result?.updateInfo?.version !== manifest.version) {
-      throw new Error('Update version does not match the client release metadata');
-    }
-    if (result?.updateInfo && updateState.status === 'available' && download) {
-      await updater.downloadUpdate();
-    }
-    return updateState;
-  })();
-  try { return await updateTask; }
-  catch (error) { sendUpdateState('error', { error: String(error.message || error) }); return updateState; }
-  finally { updateTask = null; }
+function installDownloadedUpdate() {
+  if (!updater || updateState.status !== 'downloaded') throw new Error('No update is ready to install');
+  sendUpdateState('installing');
+  setImmediate(() => {
+    try { updater.quitAndInstall(true, true); }
+    catch (error) { sendUpdateState('error', { error: String(error.message || error) }); }
+  });
+}
+
+function checkForUpdate(installAfterDownload) {
+  return updateFlow ? updateFlow.run(installAfterDownload) : Promise.resolve(updateState);
 }
 
 async function readNotifications(refresh = false) {
@@ -261,9 +267,7 @@ ipcMain.handle('pos:notification-hidden-save', (_event, userId, ids) => {
 ipcMain.handle('pos:update-state', () => updateState);
 ipcMain.handle('pos:update-start', () => checkForUpdate(true));
 ipcMain.handle('pos:update-install', () => {
-  if (!updater || updateState.status !== 'downloaded') throw new Error('No update is ready to install');
-  sendUpdateState('installing');
-  setImmediate(() => updater.quitAndInstall(false, true));
+  installDownloadedUpdate();
   return { ok: true };
 });
 
