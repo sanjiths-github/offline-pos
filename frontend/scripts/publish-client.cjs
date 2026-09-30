@@ -14,8 +14,11 @@ if (!idPattern.test(clientId || '')) throw new Error('Usage: npm run client:publ
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.repository) || !/^[A-Za-z0-9_.-]+$/.test(config.branch)) throw new Error('Invalid updates.json');
 const client = JSON.parse(fs.readFileSync(path.join(root, 'clients', `${clientId}.json`), 'utf8'));
 if (client.clientId !== clientId) throw new Error('Client profile mismatch');
-const base = `https://raw.githubusercontent.com/${config.repository}/${config.branch}/${clientId}`;
-if (client.notificationFeedUrl !== `${base}/notifications.json` || client.updateFeedUrl !== `${base}/windows/`) {
+const bases = [
+  `https://raw.githubusercontent.com/${config.repository}/${config.branch}/${clientId}`,
+  `https://api.github.com/repos/${config.repository}/contents/${clientId}`
+];
+if (!bases.some(base => client.notificationFeedUrl === `${base}/notifications.json` && client.updateFeedUrl === `${base}/windows/`)) {
   throw new Error(`Client ${clientId} feed URLs do not match updates.json`);
 }
 

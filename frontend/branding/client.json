@@ -11,6 +11,6 @@
   "timezone": "America/Chicago",
   "defaultTaxRateBps": 825,
   "sampleData": true,
-  "notificationFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/notifications.json",
-  "updateFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/windows/"
+  "notificationFeedUrl": "https://api.github.com/repos/sanjuconnectrader/pos-system-updates/contents/downtown-coffee-house/notifications.json",
+  "updateFeedUrl": "https://api.github.com/repos/sanjuconnectrader/pos-system-updates/contents/downtown-coffee-house/windows/"
 }

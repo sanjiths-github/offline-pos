@@ -1,0 +1,7 @@
+{
+  "clientId": "downtown-coffee-house",
+  "version": "1.1.10",
+  "type": "update",
+  "message": "Fix update checks and notification refresh",
+  "date": "2026-09-30T12:17:45.577Z"
+}

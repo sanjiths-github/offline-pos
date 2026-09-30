@@ -112,7 +112,9 @@ export default function NotificationCenter({ clientId, userId }: Props) {
       if (window.posDesktop?.notifications) {
         notices = await window.posDesktop.notifications(true) as Notice[];
       } else {
-        const response = await fetch(clientBrand.notificationFeedUrl || './notifications.json', { cache: 'no-store' });
+        const feedUrl = clientBrand.notificationFeedUrl || './notifications.json';
+        const headers = feedUrl.startsWith('https://api.github.com/') ? { Accept: 'application/vnd.github.raw+json' } : undefined;
+        const response = await fetch(feedUrl, { headers, cache: 'no-store' });
         if (!response.ok) throw new Error('Notification feed returned ' + response.status);
         const payload = await response.json() as { clientId: string; notifications: Notice[] };
         if (payload.clientId !== clientId) throw new Error('Notification feed belongs to another client');

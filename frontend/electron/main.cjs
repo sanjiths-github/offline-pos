@@ -33,6 +33,12 @@ function clientFeedUrl(value) {
   return url;
 }
 
+function clientFeedHeaders(url) {
+  return url.hostname === 'api.github.com'
+    ? { Accept: 'application/vnd.github.raw+json', 'User-Agent': 'OfflinePOS' }
+    : {};
+}
+
 function sendUpdateState(status, details = {}) {
   updateState = { ...updateState, status, ...details };
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('pos:update-state', updateState);
@@ -40,8 +46,9 @@ function sendUpdateState(status, details = {}) {
 
 function setupUpdater() {
   if (isDevelopment || process.platform !== 'win32' || !client.updateFeedUrl) return;
-  clientFeedUrl(client.updateFeedUrl);
+  const feed = clientFeedUrl(client.updateFeedUrl);
   updater = require('electron-updater').autoUpdater;
+  if (feed.hostname === 'api.github.com') updater.requestHeaders = clientFeedHeaders(feed);
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
   updater.on('checking-for-update', () => sendUpdateState('checking', { error: '' }));
@@ -60,7 +67,7 @@ async function checkForUpdate(download) {
   updateTask = (async () => {
     const feed = clientFeedUrl(client.updateFeedUrl);
     const manifestUrl = new URL('release.json', feed.href.endsWith('/') ? feed.href : feed.href + '/');
-    const manifestResponse = await fetch(manifestUrl, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
+    const manifestResponse = await fetch(manifestUrl, { headers: clientFeedHeaders(manifestUrl), signal: AbortSignal.timeout(8000), cache: 'no-store' });
     if (!manifestResponse.ok) throw new Error(`Release metadata returned ${manifestResponse.status}`);
     const manifest = await manifestResponse.json();
     const expectedAppId = `com.localpos.${client.clientId.replaceAll('-', '')}`;
@@ -98,7 +105,7 @@ async function readNotifications(refresh = false) {
     try {
       const url = clientFeedUrl(client.notificationFeedUrl);
       url.searchParams.set('checked', String(Date.now()));
-      const response = await fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
+      const response = await fetch(url, { headers: clientFeedHeaders(url), signal: AbortSignal.timeout(8000), cache: 'no-store' });
       if (!response.ok) throw new Error(`Notification feed returned ${response.status}`);
       const raw = await response.text();
       if (raw.length > 1_000_000) throw new Error('Notification feed is too large');
