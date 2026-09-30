@@ -12,4 +12,12 @@ function publicLatestYml(latest, version, installerUrl) {
   return result;
 }
 
-module.exports = { publicLatestYml };
+function publishedAsset(assets, filename, expectedSize) {
+  const extension = filename.slice(filename.lastIndexOf('.')).toLowerCase();
+  const matches = assets.filter(asset => asset.name.toLowerCase().endsWith(extension) &&
+    asset.size === expectedSize && /^https:\/\/github\.com\//.test(asset.url || ''));
+  if (matches.length !== 1) throw new Error(`Expected one published release asset for ${filename}`);
+  return matches[0];
+}
+
+module.exports = { publicLatestYml, publishedAsset };

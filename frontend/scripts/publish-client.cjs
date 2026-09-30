@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { publicLatestYml } = require('./update-feed.cjs');
+const { publicLatestYml, publishedAsset } = require('./update-feed.cjs');
 
 const root = path.resolve(__dirname, '..');
 const config = require('../updates.json');
@@ -84,8 +84,8 @@ function main() {
     const tag = `${clientId}-v${version}`;
     const existing = releaseInfo(tag);
     if (existing && !existing.isDraft) {
-      const asset = existing.assets.find(item => item.name === installer);
-      if (!asset || asset.size !== fs.statSync(installerPath).size) throw new Error(`Published ${tag} differs from the local installer. Bump the version for a new release.`);
+      publishedAsset(existing.assets, installer, fs.statSync(installerPath).size);
+      publishedAsset(existing.assets, `${installer}.blockmap`, fs.statSync(blockmapPath).size);
     } else if (existing) {
       gh('release', 'upload', tag, installerPath, blockmapPath, '-R', config.repository, '--clobber');
       gh('release', 'edit', tag, '-R', config.repository, '--draft=false');
@@ -96,7 +96,9 @@ function main() {
       gh('release', 'edit', tag, '-R', config.repository, '--draft=false');
     }
 
-    const installerUrl = `https://github.com/${config.repository}/releases/download/${tag}/${encodeURIComponent(installer)}`;
+    const published = releaseInfo(tag);
+    if (!published || published.isDraft) throw new Error(`Release ${tag} is not published`);
+    const installerUrl = publishedAsset(published.assets, installer, fs.statSync(installerPath).size).url;
     const publicLatest = publicLatestYml(fs.readFileSync(latestPath, 'utf8'), version, installerUrl);
     upload(`${clientId}/windows/release.json`, fs.readFileSync(releasePath), `Publish ${clientId} ${version} release metadata`);
     upload(`${clientId}/windows/latest.yml`, publicLatest, `Publish ${clientId} ${version} update`);
