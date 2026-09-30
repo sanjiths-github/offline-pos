@@ -44,14 +44,14 @@ async function main() {
     const clientId = choices[index]?.clientId || 'all-clients';
     console.log(`Selected client: ${clientId}\n`);
     const types = [
-      ['normal', 'Normal code change'],
-      ['notification', 'Notification'],
-      ['update', 'Software update'],
-      ['bugfix', 'Bug fix'],
-      ['feature', 'New feature']
+      ['normal', 'Normal code change', 'Normal code change (no installer)'],
+      ['notification', 'Notification', 'Notification (no installer)'],
+      ['update', 'Software update', 'Software update (installer and update button)'],
+      ['bugfix', 'Bug fix', 'Bug fix announcement (no installer)'],
+      ['feature', 'New feature', 'New feature announcement (no installer)']
     ];
     console.log('What type of change is this?\n');
-    types.forEach(([_, label], number) => console.log(`${number + 1}. ${label}`));
+    types.forEach(([_, , menuLabel], number) => console.log(`${number + 1}. ${menuLabel}`));
     const typeIndex = Number((await rl.question('\nSelect type: ')).trim()) - 1;
     if (!Number.isInteger(typeIndex) || typeIndex < 0 || typeIndex >= types.length) throw new Error('Invalid change type');
     const [type, label] = types[typeIndex];
