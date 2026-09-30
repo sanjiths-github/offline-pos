@@ -16,6 +16,10 @@
 .notification-dropdown-list{max-height:390px;overflow:auto}
 .notification-row,.notification-history-row{width:100%;border:0;border-bottom:1px solid #edf1f5;display:flex;align-items:flex-start;gap:12px;text-align:left;position:relative;cursor:pointer;transition:background .16s}
 .notification-row{min-height:85px;padding:13px 17px}
+.notification-entry,.notification-history-entry{position:relative}
+.notification-entry>.notification-row,.notification-history-entry>.notification-history-row{padding-right:48px}
+.notification-delete{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:0;border-radius:8px;display:grid;place-items:center;background:transparent;color:#8793a0;cursor:pointer}
+.notification-delete:hover{background:#fff0ef;color:#b34139}
 .notification-row.is-unread,.notification-history-row.is-unread{background:#eef5ff}
 .notification-row.is-read,.notification-history-row.is-read{background:#fff}
 .notification-row:hover,.notification-history-row:hover{background:#e6f0ff}
@@ -76,6 +80,17 @@
 .notification-progress{height:7px;border-radius:20px;background:#e5ebf4;overflow:hidden}
 .notification-progress i{height:100%;display:block;background:#4b80ed}
 .notification-modal-footer{border-top:1px solid #edf1f5;padding:13px 25px}
+.notification-modal-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.notification-modal-footer .notification-delete-detail{color:#a34843}
+.notification-modal-footer .notification-delete-detail svg{transform:none}
+.notification-confirm-backdrop{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:18px;background:#1b283795}
+.notification-confirm{width:min(390px,100%);background:#fff;border:1px solid #e5e9ed;border-radius:16px;padding:24px;box-shadow:0 22px 65px #16202d36;animation:notification-enter .18s ease-out}
+.notification-confirm-icon{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:#fbefee;color:#bc5148;margin-bottom:15px}
+.notification-confirm h2{font-size:17px;color:#222a31;margin:0 0 7px}
+.notification-confirm p{font-size:12px;color:#687581;line-height:1.5;margin:0 0 22px}
+.notification-confirm>div{display:flex;justify-content:flex-end;gap:9px}
+.notification-confirm>div button{border:1px solid #dce2e6;border-radius:8px;padding:9px 14px;background:#fff;color:#34404a;font-size:12px;cursor:pointer}
+.notification-confirm>div button:last-child{background:#b84840;border-color:#b84840;color:#fff}
 .notification-modal-footer button{border:0;background:transparent;color:#4178df;font-size:12px;font-weight:700;padding:4px 0;display:flex;align-items:center;gap:8px;cursor:pointer}
 .notification-modal-footer svg{transform:rotate(180deg)}
 .notification-toast{position:fixed;top:90px;right:26px;z-index:70;width:min(400px,calc(100vw - 32px));display:flex;align-items:flex-start;gap:12px;padding:16px 40px 16px 16px;border:1px solid #dce6f3;border-left:3px solid #4b80ed;border-radius:13px;background:#fff;box-shadow:0 16px 45px #15274729;animation:notification-enter .25s ease-out}

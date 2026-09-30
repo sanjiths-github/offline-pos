@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('posDesktop', {
   notifications: refresh => ipcRenderer.invoke('pos:notifications', refresh === true),
   notificationReadIds: userId => ipcRenderer.invoke('pos:notification-read-get', userId),
   saveNotificationReadIds: (userId, ids) => ipcRenderer.invoke('pos:notification-read-save', userId, ids),
+  notificationHiddenIds: userId => ipcRenderer.invoke('pos:notification-hidden-get', userId),
+  saveNotificationHiddenIds: (userId, ids) => ipcRenderer.invoke('pos:notification-hidden-save', userId, ids),
   updateState: () => ipcRenderer.invoke('pos:update-state'),
   startUpdate: () => ipcRenderer.invoke('pos:update-start'),
   installUpdate: () => ipcRenderer.invoke('pos:update-install'),

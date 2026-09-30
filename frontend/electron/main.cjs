@@ -124,9 +124,16 @@ async function readNotifications(refresh = false) {
 }
 
 const notificationReadPath = path.join(stableUserDir, 'notification-read.json');
+const notificationHiddenPath = path.join(stableUserDir, 'notification-hidden.json');
 function notificationReadState() {
   try {
     const state = JSON.parse(fs.readFileSync(notificationReadPath, 'utf8'));
+    return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
+  } catch { return {}; }
+}
+function notificationHiddenState() {
+  try {
+    const state = JSON.parse(fs.readFileSync(notificationHiddenPath, 'utf8'));
     return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
   } catch { return {}; }
 }
@@ -238,6 +245,17 @@ ipcMain.handle('pos:notification-read-save', (_event, userId, ids) => {
   const state = notificationReadState();
   state[notificationUserKey(userId)] = [...new Set(ids)];
   fs.writeFileSync(notificationReadPath, JSON.stringify(state));
+  return { ok: true };
+});
+ipcMain.handle('pos:notification-hidden-get', (_event, userId) => {
+  const ids = notificationHiddenState()[notificationUserKey(userId)];
+  return Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : [];
+});
+ipcMain.handle('pos:notification-hidden-save', (_event, userId, ids) => {
+  if (!Array.isArray(ids) || ids.length > 10_000 || ids.some(id => typeof id !== 'string' || id.length > 160)) throw new Error('Invalid notification hidden state');
+  const state = notificationHiddenState();
+  state[notificationUserKey(userId)] = [...new Set(ids)];
+  fs.writeFileSync(notificationHiddenPath, JSON.stringify(state));
   return { ok: true };
 });
 ipcMain.handle('pos:update-state', () => updateState);
