@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+release*/
+release-feeds/
+assets/generated/
+public/branding/
+public/notifications.json
+branding/*.key
+provisioning/client.json
+*.tsbuildinfo

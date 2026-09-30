@@ -1,0 +1,29 @@
+{
+  "name": "offline-pos",
+  "version": "1.0.0",
+  "description": "Single-business offline point of sale MVP",
+  "keywords": [],
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "server.js": "node src/server.js",
+    "bootstrap": "node src/bootstrap.js",
+    "reset-client": "node src/reset-with-key.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

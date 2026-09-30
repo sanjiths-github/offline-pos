@@ -1,0 +1,40 @@
+.notification-center{position:relative;display:flex;align-items:center}
+.notification-trigger{width:36px;height:36px;border:1px solid #e2e7ed;background:#fff;border-radius:9px;color:#5d6a77;display:grid;place-items:center;position:relative}
+.notification-trigger:hover,.notification-trigger[aria-expanded=true]{color:#4b80ed;border-color:#b9cef5}
+.notification-trigger i{position:absolute;right:6px;top:5px;width:7px;height:7px;border-radius:50%;background:#ed604d;border:1px solid #fff}
+.notification-dismiss{position:fixed;inset:0;border:0;background:transparent;z-index:20;cursor:default}
+.notification-dropdown{position:absolute;right:0;top:46px;width:min(360px,calc(100vw - 25px));max-height:440px;overflow:auto;background:#fff;border:1px solid #e2e7ed;border-radius:11px;box-shadow:0 14px 40px #18243321;z-index:21}
+.notification-dropdown-head{height:46px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf0f3}
+.notification-dropdown-head strong{font-size:13px;color:#29333d}
+.notification-dropdown-head span{font-size:11px;color:#82909d}
+.notification-row{display:grid;gap:5px;text-align:left;width:100%;border:0;border-bottom:1px solid #f0f2f4;background:#fff;padding:12px 15px}
+.notification-row:hover,.notification-history button:hover{background:#f7f9fd}
+.notification-row strong,.notification-history strong{font-size:12px;color:#28333e}
+.notification-row span,.notification-history span{font-size:11px;color:#7d8892;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.notification-row small,.notification-history small{font-size:10px;color:#a0aab3}
+.notification-view-all{width:100%;height:41px;border:0;background:#fff;color:#4b80ed;font-size:12px;font-weight:700}
+.notification-view-all:hover{background:#f7f9fd}
+.notification-empty{padding:24px 15px;margin:0;text-align:center;font-size:12px;color:#929ca6}
+.notification-modal-backdrop{position:fixed;inset:0;z-index:50;background:#14213277;display:grid;place-items:center;padding:18px}
+.notification-modal{background:#fff;border-radius:12px;border:1px solid #e4e8ed;width:min(600px,100%);max-height:min(760px,calc(100vh - 36px));display:flex;flex-direction:column;overflow:hidden}
+.notification-modal header{padding:18px 20px;border-bottom:1px solid #e9edf1;display:flex;justify-content:space-between;gap:15px;align-items:start}
+.notification-modal header h2{font-size:17px;letter-spacing:-.3px;margin:0 0 5px;color:#25303b}
+.notification-modal header p{font-size:11px;color:#919ba5;margin:0;text-transform:capitalize}
+.notification-modal header button{width:26px;height:26px;border:0;background:transparent;color:#7b8793}
+.notification-detail,.notification-history{padding:18px 20px;overflow:auto}
+.notification-description{color:#596572;font-size:13px;line-height:1.55;margin:0 0 15px}
+.notification-markdown{font-size:13px;color:#3d4853;line-height:1.6;overflow-wrap:anywhere}
+.notification-markdown h1,.notification-markdown h2,.notification-markdown h3{font-size:15px;margin:16px 0 7px}
+.notification-markdown p{font-size:13px;color:#3d4853;margin:8px 0}
+.notification-markdown ul,.notification-markdown ol{padding-left:22px}
+.notification-markdown a{color:#4b80ed}
+.notification-update{border-top:1px solid #edf0f3;margin-top:18px;padding-top:17px;display:grid;gap:10px}
+.notification-update .primary-button{justify-self:start;display:flex;align-items:center;gap:7px}
+.notification-update small{font-size:11px;color:#78838e}
+.notification-update .notification-error{color:#c8433e}
+.notification-progress{height:7px;border-radius:20px;background:#edf1f6;overflow:hidden}
+.notification-progress i{height:100%;display:block;background:#4b80ed}
+.notification-history{display:grid;gap:0}
+.notification-history button{display:grid;gap:5px;text-align:left;border:0;border-bottom:1px solid #edf0f3;background:#fff;padding:12px 4px}
+.notification-modal footer{border-top:1px solid #edf0f3;padding:10px 20px}
+.notification-modal footer button{border:0;background:transparent;color:#4b80ed;font-size:12px;font-weight:700;padding:4px 0}

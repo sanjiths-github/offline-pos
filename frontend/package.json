@@ -1,0 +1,45 @@
+{
+  "name": "offline-pos-desktop",
+  "version": "1.1.2",
+  "description": "Offline POS desktop dashboard",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "npm run notifications:build && next dev -H 127.0.0.1",
+    "build": "npm run icons && npm run notifications:build && next build",
+    "icons": "node scripts/generate-icons.cjs",
+    "notifications:build": "node scripts/build-notifications.cjs",
+    "notifications:export": "node scripts/build-notifications.cjs --all",
+    "push-client": "node scripts/push-client.cjs",
+    "client:prepare": "node scripts/prepare-client.cjs",
+    "client:check": "node scripts/check-client.cjs",
+    "desktop:dev": "concurrently -k \"npm:dev\" \"wait-on http://127.0.0.1:3000 && node scripts/run-electron.cjs\"",
+    "desktop:pack": "npm run client:check && npm run build && electron-builder --config electron-builder.config.cjs --dir",
+    "desktop:dist": "npm run client:check && npm run build && electron-builder --config electron-builder.config.cjs --publish never && node scripts/write-release-manifest.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^1.48.0",
+    "next": "^16.3.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "bcryptjs": "^3.0.3",
+    "concurrently": "^10.0.5",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "wait-on": "^9.4.0"
+  }
+}

@@ -1,0 +1,21 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const sharp = require('sharp');
+const pngToIco = require('png-to-ico').default;
+const root = path.join(__dirname, '..');
+const branding = path.join(root, 'branding');
+const config = JSON.parse(fs.readFileSync(path.join(branding, 'client.json'), 'utf8'));
+const source = path.resolve(branding, config.logo);
+if (!source.startsWith(branding + path.sep)) throw new Error('Logo must be inside branding/');
+if (!fs.existsSync(source)) throw new Error(`Logo not found: ${source}`);
+const generated = path.join(root, 'assets', 'generated');
+const publicBranding = path.join(root, 'public', 'branding');
+fs.mkdirSync(generated, { recursive: true });
+fs.mkdirSync(publicBranding, { recursive: true });
+(async () => {
+  await sharp(source).resize(512, 512, { fit: 'contain', background: '#00000000' }).png().toFile(path.join(generated, 'icon.png'));
+  await fs.promises.writeFile(path.join(generated, 'icon.ico'), await pngToIco(path.join(generated, 'icon.png')));
+  await sharp(source).resize(160, 160, { fit: 'contain', background: '#00000000' }).png().toFile(path.join(publicBranding, 'logo.png'));
+  fs.writeFileSync(path.join(publicBranding, 'client.json'), JSON.stringify({ name: config.name, tagline: config.tagline }));
+  console.log(`Generated desktop and UI icons from ${path.relative(root, source)}`);
+})().catch(error => { console.error(error); process.exitCode = 1; });

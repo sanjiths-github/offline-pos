@@ -1,0 +1,14 @@
+{
+  "clientId": "downtown-coffee-house",
+  "name": "Downtown Coffee House",
+  "appName": "Downtown Coffee POS",
+  "tagline": "GOOD COFFEE. BRIGHTER DAYS.",
+  "logo": "client-logo.svg",
+  "ownerName": "John Smith",
+  "city": "Austin",
+  "state": "Texas",
+  "currency": "USD",
+  "timezone": "America/Chicago",
+  "defaultTaxRateBps": 825,
+  "sampleData": true
+}
