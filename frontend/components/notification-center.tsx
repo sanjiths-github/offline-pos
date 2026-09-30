@@ -6,7 +6,7 @@ import Markdown from 'react-markdown';
 
 type Notice = {
   id: string; heading: string; description: string; date: string; type: string;
-  targetClient: string; updateAvailable: boolean; buttonText: string; content: string;
+  targetClient: string; updateAvailable: boolean; version?: string | null; buttonText: string; content: string;
 };
 type UpdateState = { status: string; version?: string; availableVersion?: string; progress?: number; error?: string };
 
@@ -46,6 +46,15 @@ export default function NotificationCenter() {
   const updateLabel = update.status === 'downloaded' ? 'Restart & Update' : update.status === 'downloading' ? `Downloading… ${update.progress || 0}%` : update.status === 'checking' ? 'Checking for update…' : selected?.buttonText || 'Update Now';
   const updateBusy = ['checking', 'downloading', 'installing'].includes(update.status);
   const desktopAvailable = typeof window !== 'undefined' && Boolean(window.posDesktop?.startUpdate);
+  const newerThanInstalled = (target?: string | null) => {
+    if (!target || !update.version) return true;
+    const targetParts = target.split('.').map(Number);
+    const installedParts = update.version.split('.').map(Number);
+    for (let index = 0; index < 3; index += 1) {
+      if (targetParts[index] !== installedParts[index]) return targetParts[index] > installedParts[index];
+    }
+    return false;
+  };
 
   return <div className="notification-center">
     <button className="notification-trigger" aria-label="Notifications" aria-expanded={open} onClick={() => setOpen(value => !value)}><Bell size={19} />{items.length > 0 && <i />}</button>
@@ -57,7 +66,7 @@ export default function NotificationCenter() {
     </div></>}
     {(selected || viewAll) && <div className="notification-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) { setSelected(null); setViewAll(false); } }}><section className="notification-modal" role="dialog" aria-modal="true" aria-label={selected?.heading || 'All notifications'}>
       <header><div><h2>{selected?.heading || 'All notifications'}</h2>{selected && <p>{selected.date} · {selected.type}</p>}</div><button aria-label="Close" onClick={() => { setSelected(null); setViewAll(false); }}><X size={19} /></button></header>
-      {selected ? <div className="notification-detail"><p className="notification-description">{selected.description}</p><div className="notification-markdown"><Markdown>{selected.content}</Markdown></div>{selected.updateAvailable && <div className="notification-update"><small>Installed version: {update.version || 'Unknown'}{update.availableVersion ? ` · Available: ${update.availableVersion}` : ''}</small><button className="primary-button" disabled={!desktopAvailable || update.status === 'unavailable' || updateBusy} onClick={update.status === 'downloaded' ? installUpdate : startUpdate}>{update.status === 'downloaded' ? <RefreshCw size={15} /> : <Download size={15} />}{updateLabel}</button>{update.status === 'downloading' && <div className="notification-progress"><i style={{ width: `${update.progress || 0}%` }} /></div>}{update.status === 'current' && <small>Application is already up to date.</small>}{update.status === 'error' && <small className="notification-error">{update.error}</small>}{(!desktopAvailable || update.status === 'unavailable') && <small>Update downloads are not configured for this installation.</small>}</div>}</div>
+      {selected ? <div className="notification-detail"><p className="notification-description">{selected.description}</p><div className="notification-markdown"><Markdown>{selected.content}</Markdown></div>{selected.updateAvailable && newerThanInstalled(selected.version) && <div className="notification-update"><small>Installed version: {update.version || 'Unknown'}{update.availableVersion ? ` · Available: ${update.availableVersion}` : ''}</small><button className="primary-button" disabled={!desktopAvailable || update.status === 'unavailable' || updateBusy} onClick={update.status === 'downloaded' ? installUpdate : startUpdate}>{update.status === 'downloaded' ? <RefreshCw size={15} /> : <Download size={15} />}{updateLabel}</button>{update.status === 'downloading' && <div className="notification-progress"><i style={{ width: `${update.progress || 0}%` }} /></div>}{update.status === 'current' && <small>Application is already up to date.</small>}{update.status === 'error' && <small className="notification-error">{update.error}</small>}{(!desktopAvailable || update.status === 'unavailable') && <small>Update downloads are not configured for this installation.</small>}</div>}</div>
         : <div className="notification-history">{items.map(item => <button key={item.id} onClick={() => setSelected(item)}><strong>{item.heading}</strong><span>{item.description}</span><small>{item.date} · {item.type}</small></button>)}{items.length === 0 && <p className="notification-empty">No notifications yet.</p>}</div>}
       {selected && <footer><button onClick={() => { setSelected(null); setViewAll(true); }}>Back to all notifications</button></footer>}
     </section></div>}

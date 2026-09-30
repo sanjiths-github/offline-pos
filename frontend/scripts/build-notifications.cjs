@@ -40,6 +40,7 @@ function parse(file) {
   if (fields.targetClient !== 'all-clients' && !idPattern.test(fields.targetClient)) throw new Error(`Invalid targetClient in ${file}`);
   if (fields.targetClient !== 'all-clients' && !knownClients.has(fields.targetClient)) throw new Error(`Unknown targetClient in ${file}: ${fields.targetClient}`);
   if (!['true', 'false', undefined].includes(fields.updateAvailable)) throw new Error(`Invalid updateAvailable in ${file}`);
+  if (fields.version !== undefined && !/^\d+\.\d+\.\d+$/.test(fields.version)) throw new Error(`Invalid version in ${file}`);
   return {
     id: path.basename(file, '.md'),
     heading: fields.heading.slice(0, 160),
@@ -48,6 +49,7 @@ function parse(file) {
     type: fields.type,
     targetClient: fields.targetClient,
     updateAvailable: fields.updateAvailable === 'true',
+    version: fields.version || null,
     buttonText: fields.buttonText || 'Update Now',
     content: match[2].trim()
   };

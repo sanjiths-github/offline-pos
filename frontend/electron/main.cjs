@@ -136,7 +136,7 @@ async function startBackend() {
     fs.cpSync(legacyDataDir, dataDir, { recursive: true, force: false, errorOnExist: false });
   }
   const manifest = isDevelopment
-    ? path.resolve(__dirname, '..', 'provisioning', 'client.json')
+    ? require('../scripts/client-provisioning.cjs').manifestFor(client.clientId)
     : path.join(process.resourcesPath, 'provisioning', 'client.json');
   if (!fs.existsSync(manifest)) throw new Error('Client provisioning is missing. Run npm run client:prepare first.');
   await new Promise((resolve, reject) => {

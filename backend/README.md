@@ -34,7 +34,7 @@ The bootstrap command prints a temporary system administrator password once. Ope
 
 `POS_DATA_DIR` can point to a directory for the SQLite database and backups. The default is `backend/data`. Keep this directory on persistent local storage and copy backups to separate storage. The server listens only on `127.0.0.1`.
 
-To reset a provisioned client's forgotten password, stop the desktop app, point `POS_DATA_DIR` at that client's `%APPDATA%\OfflinePOS\<clientId>\pos-data`, and run `npm run reset-client -- <username> <developer-key-file>`. This only resets the password and sessions. It preserves the SQLite sales, menu, and backup files. See `../frontend/README.md` for the full desktop workflow.
+To reset a provisioned client's forgotten password, stop the desktop app, point `POS_DATA_DIR` at that client's `%APPDATA%\OfflinePOS\<clientId>\pos-data`, and run `npm run reset-client -- <username> <developer-key-file>`. The command prompts privately for the temporary password you choose. This only resets the password and sessions. It preserves the SQLite sales, menu, and backup files. See `../frontend/README.md` for the full desktop workflow.
 
 ## Operations
 

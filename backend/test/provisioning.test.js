@@ -20,17 +20,17 @@ test('client provisioning and developer reset preserve local data', () => {
     developerKeyHash: crypto.createHash('sha256').update(key).digest('hex'), sampleData: true
   }));
   const env = { ...process.env, POS_DATA_DIR: dir };
-  const run = (file, ...args) => execFileSync(process.execPath, [path.join(__dirname, '..', 'src', file), ...args], { env, encoding: 'utf8' });
+  const run = (file, args = [], input) => execFileSync(process.execPath, [path.join(__dirname, '..', 'src', file), ...args], { env, encoding: 'utf8', input });
   try {
-    run('apply-provisioning.js', manifestPath);
+    run('apply-provisioning.js', [manifestPath]);
     const db = new DatabaseSync(path.join(dir, 'pos.sqlite'));
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM products').get().count, 7);
     assert.equal(db.prepare('SELECT must_change_password AS flag FROM users WHERE username=?').get('testadmin').flag, 1);
     db.prepare("INSERT INTO customers(name,phone) VALUES('Keep Me','1234567890')").run();
     db.close();
-    run('apply-provisioning.js', manifestPath);
-    const resetOutput = run('reset-with-key.js', 'testadmin', keyPath);
-    assert.match(resetOutput, /Temporary password for testadmin:/);
+    run('apply-provisioning.js', [manifestPath]);
+    const resetOutput = run('reset-with-key.js', ['testadmin', keyPath, '--password-stdin'], 'ChosenResetPass123!\nChosenResetPass123!\n');
+    assert.match(resetOutput, /Temporary password set for testadmin/);
     const after = new DatabaseSync(path.join(dir, 'pos.sqlite'));
     assert.equal(after.prepare('SELECT COUNT(*) AS count FROM customers').get().count, 1);
     assert.equal(after.prepare('SELECT COUNT(*) AS count FROM products').get().count, 7);
@@ -38,6 +38,7 @@ test('client provisioning and developer reset preserve local data', () => {
     assert.equal(user.must_change_password, 1);
     assert.equal(user.session_version, 1);
     assert.equal(bcrypt.compareSync('InitialPass123!', user.password_hash), false);
+    assert.equal(bcrypt.compareSync('ChosenResetPass123!', user.password_hash), true);
     after.close();
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

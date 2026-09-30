@@ -5,13 +5,18 @@ const readline = require('node:readline/promises');
 const root = path.resolve(__dirname, '..', '..');
 const frontend = path.resolve(__dirname, '..');
 const currentClient = require('../branding/client.json');
-const version = require('../package.json').version;
+let version = require('../package.json').version;
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function git(...args) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
   if (result.error || result.status !== 0) throw new Error((result.stderr || result.error?.message || `git ${args[0]} failed`).trim());
   return result.stdout.trim();
+}
+
+function run(file, args, cwd = frontend) {
+  const result = spawnSync(file, args, { cwd, windowsHide: true, stdio: 'inherit', shell: file === 'npm.cmd' });
+  if (result.error || result.status !== 0) throw new Error(`${file} ${args[0]} failed. Fix the error above and retry.`);
 }
 
 function clients() {
@@ -28,7 +33,6 @@ function clients() {
 async function main() {
   try { git('rev-parse', '--show-toplevel'); } catch { throw new Error('This project is not a Git repository yet. Initialize Git and add a remote before using push-client.'); }
   if (!git('remote').split(/\r?\n/).includes('origin')) throw new Error('No origin remote is configured. Add your private GitHub repository first.');
-  if (git('status', '--porcelain') === '') throw new Error('There are no changes to push.');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
     const choices = clients();
@@ -51,6 +55,12 @@ async function main() {
     const typeIndex = Number((await rl.question('\nSelect type: ')).trim()) - 1;
     if (!Number.isInteger(typeIndex) || typeIndex < 0 || typeIndex >= types.length) throw new Error('Invalid change type');
     const [type, label] = types[typeIndex];
+    if (type === 'update' && clientId === 'all-clients') throw new Error('Choose one client for an application update. Each client needs its own installer.');
+    if (type === 'normal' && git('status', '--porcelain') === '') throw new Error('There are no code changes to push.');
+    if (type !== 'normal') {
+      const targets = clientId === 'all-clients' ? choices.map(item => item.clientId) : [clientId];
+      for (const target of targets) run(process.execPath, [path.join(frontend, 'scripts', 'publish-client.cjs'), target, '--check']);
+    }
     if (type === 'update') {
       const releaseDir = path.join(frontend, 'update-metadata');
       const previous = fs.existsSync(releaseDir)
@@ -60,6 +70,7 @@ async function main() {
       const parts = value => /^\d+\.\d+\.\d+$/.test(value) ? value.split('.').map(Number) : null;
       const currentParts = parts(version);
       if (!currentParts) throw new Error('Use a numeric package version such as 1.2.3');
+      currentParts[2] += 1;
       for (const item of previous) {
         const older = parts(item.version);
         const firstDifference = older?.findIndex((number, index) => number !== currentParts[index]) ?? -1;
@@ -72,10 +83,16 @@ async function main() {
     if (!message || message.length > 160 || /[\r\n]/.test(message)) throw new Error('Enter a message of 1–160 characters');
     const needsNotice = type !== 'normal';
     const buttonText = type === 'update' ? (await rl.question('Update button text [Update Now]: ')).trim() || 'Update Now' : '';
-    console.log(`\nClient: ${clientId}\nType: ${label}\nMessage: ${message}\nNotification: ${needsNotice ? 'Yes' : 'No'}`);
-    if ((await rl.question('\nStage project changes, commit, and push? (Y/N): ')).trim().toLowerCase() !== 'y') {
+    console.log(`\nClient: ${clientId}\nType: ${label}\nMessage: ${message}\nNotification: ${needsNotice ? 'Yes' : 'No'}\nInstaller build: ${type === 'update' ? 'Yes' : 'No'}`);
+    if ((await rl.question(type === 'update' ? '\nBuild this client, push code, and publish its update? (Y/N): ' : '\nStage project changes, commit, and push? (Y/N): ')).trim().toLowerCase() !== 'y') {
       console.log('Cancelled. Nothing was pushed.');
       return;
+    }
+    if (type === 'update') {
+      run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['version', 'patch', '--no-git-tag-version']);
+      version = JSON.parse(fs.readFileSync(path.join(frontend, 'package.json'), 'utf8')).version;
+      run(process.execPath, [path.join(frontend, 'scripts', 'select-client.cjs'), clientId]);
+      run(process.execPath, [path.join(frontend, 'scripts', 'check-client.cjs')]);
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const metadataDir = path.join(frontend, 'update-metadata');
@@ -89,13 +106,16 @@ async function main() {
         '---', `heading: ${JSON.stringify(heading)}`, `description: ${JSON.stringify(message)}`,
         `date: ${JSON.stringify(new Date().toISOString().slice(0, 10))}`, `type: ${JSON.stringify(type === 'notification' ? 'announcement' : type)}`,
         `targetClient: ${JSON.stringify(clientId)}`, `updateAvailable: ${type === 'update'}`,
+        ...(type === 'update' ? [`version: ${JSON.stringify(version)}`] : []),
         `buttonText: ${JSON.stringify(buttonText || 'Update Now')}`, '---', '', message, ''
       ];
       fs.writeFileSync(noticePath, fields.join('\n'), { flag: 'wx' });
     }
+    if (type === 'update') run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'desktop:dist']);
+    else if (needsNotice) run(process.execPath, [path.join(frontend, 'scripts', 'build-notifications.cjs'), '--all']);
     git('add', '-A', '--', '.');
     const staged = git('diff', '--cached', '--name-only').split(/\r?\n/);
-    const sensitive = staged.filter(name => /(?:^|\/)(?:node_modules|data|provisioning)(?:\/|$)|\.key$|\.sqlite(?:-wal|-shm)?$|(?:^|\/)release[^/]*\//i.test(name.replaceAll('\\', '/')));
+    const sensitive = staged.filter(name => /(?:^|\/)(?:node_modules|data|provisioning|private)(?:\/|$)|\.key$|\.sqlite(?:-wal|-shm)?$|(?:^|\/)release[^/]*\//i.test(name.replaceAll('\\', '/')));
     if (sensitive.length) throw new Error(`Refusing to push sensitive or generated files: ${sensitive.join(', ')}`);
     git('commit', '-m', `[${clientId}] ${label}: ${message}`);
     const branch = git('branch', '--show-current');
@@ -104,7 +124,20 @@ async function main() {
     try { git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'); }
     catch { hasUpstream = false; }
     console.log(hasUpstream ? git('push') : git('push', '-u', 'origin', branch));
-    console.log('Pushed successfully. A GitHub build/publishing workflow is still required to deliver this change to installed apps.');
+    console.log(needsNotice ? 'Private source pushed. Publishing selected client feed...' : 'Private source pushed.');
+    try {
+      if (type === 'update') run(process.execPath, [path.join(frontend, 'scripts', 'publish-client.cjs'), clientId]);
+      else if (needsNotice) {
+        const targets = clientId === 'all-clients' ? choices.map(item => item.clientId) : [clientId];
+        for (const target of targets) run(process.execPath, [path.join(frontend, 'scripts', 'publish-client.cjs'), target, '--notifications-only']);
+      }
+    } catch (error) {
+      console.error(clientId === 'all-clients'
+        ? 'Source push succeeded, but feed publishing failed. Retry client:publish -- <clientId> --notifications-only for each client.'
+        : `Source push succeeded, but feed publishing failed. Fix the issue and retry: npm run client:publish -- ${clientId}${type === 'update' ? '' : ' --notifications-only'}`);
+      throw error;
+    }
+    console.log(`Pushed successfully${needsNotice ? ' and published the selected client feed' : ''}.`);
   } finally { rl.close(); }
 }
 

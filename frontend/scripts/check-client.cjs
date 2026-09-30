@@ -1,8 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { manifestFor } = require('./client-provisioning.cjs');
 const root = path.join(__dirname, '..');
 const client = JSON.parse(fs.readFileSync(path.join(root, 'branding', 'client.json'), 'utf8'));
-const manifestPath = path.join(root, 'provisioning', 'client.json');
+const manifestPath = manifestFor(client.clientId);
 if (!fs.existsSync(manifestPath)) throw new Error('Client is not provisioned. Run npm run client:prepare -- <admin-username> first.');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 if (manifest.clientId !== client.clientId || manifest.business?.name !== client.name || !manifest.admin?.passwordHash || !manifest.developerKeyHash) throw new Error('Client branding and provisioning do not match. Review the client files before packaging.');

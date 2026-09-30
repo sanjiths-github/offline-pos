@@ -1,0 +1,13 @@
+{
+  "clientId": "pizza-hut",
+  "name": "Pizza Hut",
+  "appName": "pizza",
+  "tagline": "Fresh pizza, ready to serve",
+  "logo": "pizza-hut-logo.svg",
+  "currency": "USD",
+  "timezone": "America/New_York",
+  "defaultTaxRateBps": 0,
+  "sampleData": false,
+  "notificationFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/pizza-hut/notifications.json",
+  "updateFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/pizza-hut/windows/"
+}

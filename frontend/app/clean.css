@@ -180,3 +180,13 @@
 @media(max-width:1050px){.clean-dashboard-grid{grid-template-columns:1fr}.clean-clock{display:none}}
 @media(max-width:750px){.topbar{padding:0 14px}.content{padding:18px 13px}.clean-dashboard .clean-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.clean-user>span:last-child{display:none}.clean-user{max-width:none}.clean-dashboard .clean-stat strong{font-size:21px}}
 @media(max-width:440px){.clean-dashboard .clean-stat-grid{grid-template-columns:1fr 1fr}.clean-breakdown-row{grid-template-columns:1fr auto}.clean-progress{grid-column:1/-1;grid-row:2}.clean-breakdown-row small{grid-column:2;grid-row:1}.clean-dashboard .clean-stat>span:first-child{font-size:11px}}
+
+/* Plain, border-only content boxes throughout the POS screens. */
+:root{--bg:#fff}
+.app-shell{background:#fff}
+.clean-stat,.clean-panel,.panel,.bill-panel,.billing-product,.menu-metrics,.stat-card{background:transparent;box-shadow:none;border:1px solid #e2e6ea}
+.clean-dashboard .clean-stat,.clean-dashboard .clean-panel{background:transparent;border-color:#e2e6ea}
+.stat-green,.stat-blue,.stat-orange,.stat-purple,.stat-pink,.stat-sky{background:transparent}
+.revenue-mini,.revenue-mini.blue,.revenue-mini.green,.revenue-mini.purple{background:transparent;border:1px solid #e2e6ea}
+.clean-table th,.clean-recent-panel .clean-table th{background:transparent}
+.clean-device.selected{background:transparent;border-color:#a9c4f8}

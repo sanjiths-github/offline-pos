@@ -1,6 +1,6 @@
 {
   "name": "offline-pos-desktop",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Offline POS desktop dashboard",
   "main": "electron/main.cjs",
   "scripts": {
@@ -10,12 +10,16 @@
     "notifications:build": "node scripts/build-notifications.cjs",
     "notifications:export": "node scripts/build-notifications.cjs --all",
     "push-client": "node scripts/push-client.cjs",
+    "client:publish": "node scripts/publish-client.cjs",
     "client:prepare": "node scripts/prepare-client.cjs",
+    "client:credentials": "node scripts/client-credentials.cjs",
+    "client:select": "node scripts/select-client.cjs",
     "client:check": "node scripts/check-client.cjs",
     "desktop:dev": "concurrently -k \"npm:dev\" \"wait-on http://127.0.0.1:3000 && node scripts/run-electron.cjs\"",
     "desktop:pack": "npm run client:check && npm run build && electron-builder --config electron-builder.config.cjs --dir",
     "desktop:dist": "npm run client:check && npm run build && electron-builder --config electron-builder.config.cjs --publish never && node scripts/write-release-manifest.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.cjs"
   },
   "keywords": [],
   "author": "",

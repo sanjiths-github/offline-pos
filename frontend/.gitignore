@@ -7,5 +7,6 @@ assets/generated/
 public/branding/
 public/notifications.json
 branding/*.key
-provisioning/client.json
+provisioning/*.json
+private/
 *.tsbuildinfo

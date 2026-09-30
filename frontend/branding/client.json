@@ -10,5 +10,7 @@
   "currency": "USD",
   "timezone": "America/Chicago",
   "defaultTaxRateBps": 825,
-  "sampleData": true
+  "sampleData": true,
+  "notificationFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/notifications.json",
+  "updateFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/windows/"
 }

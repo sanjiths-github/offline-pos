@@ -7,7 +7,8 @@ frontend/assets/generated/
 frontend/public/branding/
 frontend/public/notifications.json
 frontend/branding/*.key
-frontend/provisioning/client.json
+frontend/provisioning/*.json
+frontend/private/
 backend/data/
 **/*.sqlite
 **/*.sqlite-wal

@@ -4,16 +4,29 @@ Next.js provides Dashboard, Billing, Today's Sales, Sales History, Menus, and Pr
 
 ## Prepare a client
 
-Edit `branding/client.json`: keep `clientId` stable for this customer, set `name`, `appName`, and `logo`, and enter business details. Place the logo image in `branding/`. SVG, PNG, and JPG are supported. `sampleData: true` provisions seven example menu items for this test client; set it to `false` for a clean catalog. No sample sales are created.
+Each client has a profile in `clients/<clientId>.json`. Keep `clientId` stable for that customer. Set `name`, `appName`, and `logo`, and enter business details. Place the referenced logo in `branding/`. SVG, PNG, and JPG are supported. `sampleData: true` provisions example menu items; `false` starts with an empty menu. No sample sales are created. `client:select` copies a profile into the active `branding/client.json` before preparing or building.
 
 From `frontend`:
 
 ```powershell
 npm install
+npm run client:select -- downtown-coffee-house
 npm run client:prepare -- coffeeadmin
 ```
 
-This prints a temporary password once. Give the username and password to the client separately from the installer. It creates `provisioning/client.json` with password and developer-key **hashes** and a private `branding/developer-<clientId>.key` file. Keep the key file in the developer project and a separate secure backup. It is excluded from Git and from the installer. Rerunning `client:prepare` with the same client ID and username confirms the existing setup without changing credentials or printing the password again. A different username for the same client ID is rejected.
+The command prompts you to choose a temporary client password and a different developer reset key. Input is hidden and is not passed through command arguments. It stores the temporary password in `private/<clientId>.json` and the reset key in `branding/developer-<clientId>.key` on the developer computer. These plaintext files are excluded from Git and from the installer; back them up securely. The installer contains only their hashes in `provisioning/<clientId>.json`. Give the username and temporary password to the client separately from the installer; never send the developer key. Rerunning `client:prepare` with the same username leaves credentials unchanged.
+
+For the already prepared Downtown Coffee House and Pizza Hut profiles, choose new credentials **before anyone installs them**:
+
+```powershell
+npm run client:credentials -- set downtown-coffee-house
+npm run client:credentials -- set pizza-hut
+npm run client:credentials -- show pizza-hut
+```
+
+`set` asks you to confirm the client ID, then prompts for a chosen temporary password and developer reset key. It updates only that client's future installer configuration. `show` prints the saved username, original temporary password, and reset key in your terminal. Keep terminal output private. The original temporary password stops working after the client changes it. Run `desktop:dist` again after changing credentials; an already built installer still contains the old hashes. `set` does not rotate the key or password in an installation already in use.
+
+For Pizza Hut, run `npm run client:select -- pizza-hut` and use admin username `pizzahut`. Its profile uses USD, `America/New_York`, a 0% default tax rate, and an empty menu. Select Downtown again whenever building its installer. Selection changes build inputs only; it does not touch either client's installed SQLite data.
 
 ## Run locally
 
@@ -30,7 +43,7 @@ This starts Next.js, Electron, and the local backend. To run the frontend in a b
 ```powershell
 cd C:\pos-application\backend
 npm install
-node src/apply-provisioning.js ..\frontend\provisioning\client.json
+node src/apply-provisioning.js ..\frontend\provisioning\pizza-hut.json
 npm run server.js
 ```
 
@@ -48,14 +61,30 @@ cd C:\pos-application\frontend
 npm run desktop:dist
 ```
 
-Send the Windows installer in `release/` to the client using your normal download or file-sharing channel. They run the installer and launch the desktop shortcut. The package includes Next.js, the local backend, the client business setup, and the chosen icon. No Node.js install is needed on the client's machine.
+The newest Windows installer for each client is in `release/<clientId>/latest-version/`. For example, Pizza Hut's installer is in `release/pizza-hut/latest-version/`. The folder also contains release metadata and, when generated, update files. Building a newer version for the same client replaces older installer files in that client's `latest-version` folder. Send that client's installer using your normal download or file-sharing channel. They run the installer and launch the desktop shortcut. The package includes Next.js, the local backend, the client business setup, and the chosen icon. No Node.js install is needed on the client's machine.
+
+### Publish one selected client's update
+
+Before the first installation, finish `client:credentials -- set <clientId>` and verify the saved username and temporary password with `client:credentials -- show <clientId>`. Create the public downloads-only repository described below and sign in with `gh auth login`. Then run:
+
+```powershell
+cd C:\pos-application\frontend
+npm run push-client
+```
+
+Choose the client, **Software update**, and enter the message. After you confirm, the command bumps the version, builds only that client's installer, commits and pushes the source to the private repository, publishes the installer under a client-specific tag in the public downloads repository, then publishes only that client's feed and update notice. The release folder, provisioning manifest, developer key, and saved temporary password are ignored by Git. If you choose **Normal code change**, only source code is pushed. A direct `git push` does not build, publish, or notify clients.
+
+### Manual build without publishing
+
+For a local installer test, select the client and run `npm run desktop:dist`. This creates the installer in `release/<clientId>/latest-version/` without pushing source or publishing a feed. Use `npm run push-client` with **Software update** when a selected client should receive a real update.
 
 ### Windows publisher warning
 
 An unsigned installer shows **Unknown publisher**. The `signing with signtool.exe` line in build output does not prove it was signed. Check the actual file:
 
 ```powershell
-Get-AuthenticodeSignature -LiteralPath '.\release\Downtown Coffee POS Setup 1.1.1.exe' | Select-Object Status,SignerCertificate
+$installer = Get-ChildItem '.\release\downtown-coffee-house\latest-version\* Setup *.exe' | Select-Object -First 1
+Get-AuthenticodeSignature -LiteralPath $installer.FullName | Select-Object Status,SignerCertificate
 ```
 
 To display a verified publisher, obtain a trusted Windows code-signing certificate for your business. Keep its private key outside the project. For a `.pfx` certificate, set the signing environment variables only in the build terminal, rebuild, and verify `Status` is `Valid`:
@@ -64,7 +93,7 @@ To display a verified publisher, obtain a trusted Windows code-signing certifica
 $env:WIN_CSC_LINK = 'C:\secure\publisher-certificate.pfx'
 $env:WIN_CSC_KEY_PASSWORD = Read-Host 'Certificate password'
 npm run desktop:dist
-Get-AuthenticodeSignature -LiteralPath '.\release\Downtown Coffee POS Setup 1.1.1.exe' | Select-Object Status,SignerCertificate
+Get-AuthenticodeSignature -LiteralPath $installer.FullName | Select-Object Status,SignerCertificate
 Remove-Item Env:\WIN_CSC_KEY_PASSWORD
 ```
 
@@ -84,7 +113,7 @@ $env:POS_DATA_DIR = "$env:APPDATA\OfflinePOS\downtown-coffee-house\pos-data"
 npm run reset-client -- coffeeadmin ..\frontend\branding\developer-downtown-coffee-house.key
 ```
 
-The command prints a fresh temporary password, expires old sessions, and marks the account for a required password change. It leaves menu items, sales, customers, and backups intact. The reset password expires after 24 hours; run the command again if needed. The developer key is not a remote backdoor: a person needs the key plus access to that machine's data. Keep the key private; no file distributed to the client can remain secret from a client who controls that computer.
+The command privately prompts you to choose and confirm a new temporary password. It expires old sessions and marks the account for a required password change. It leaves menu items, sales, customers, and backups intact. The reset password expires after 24 hours; run the command again if needed. Keep the developer key private. The key file must match the key used when that installation was first provisioned; changing a future installer does not rotate an installed database's key. The developer key is not a remote backdoor: a person needs the key plus access to that machine's data. No file distributed to a client can remain secret from a client who controls that computer.
 
 ## Verify
 
@@ -101,17 +130,19 @@ Printer Connection lists receipt printer queues installed in Windows, including 
 
 Create Markdown announcements in `frontend/notifications/` using the front matter documented in `frontend/notifications/README.md`. The navbar bell shows the latest five, and the history view shows all received notices. `npm run notifications:build` bundles only notices addressed to this build's `clientId` or `all-clients`. The app also checks a remote feed every five minutes when configured and caches the last successful response for offline viewing.
 
-For automatic delivery, add these fields to this client's `branding/client.json` **before building the installer**:
+For automatic delivery, the client profile must contain these fields **before building the installer**. Downtown Coffee House and Pizza Hut profiles now point to the public downloads-only repository:
 
 ```json
 {
-  "notificationFeedUrl": "https://updates.example.com/downtown-coffee-house/notifications.json",
-  "updateFeedUrl": "https://updates.example.com/downtown-coffee-house/windows/"
+  "notificationFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/notifications.json",
+  "updateFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/windows/"
 }
 ```
 
-Use real HTTPS URLs containing the stable `clientId`; these are examples only. The notification endpoint must return the generated JSON with the matching top-level `clientId`. The Windows update directory must serve `latest.yml`, the NSIS installer named in that file, its `.blockmap` file, and `release.json` generated by `desktop:dist`. The app checks `clientId`, app ID, and version in `release.json` before downloading. Publish new installer files and `release.json` first, then publish `latest.yml` last. A Markdown notice with `updateAvailable: true` shows the configured button; clicking it checks the actual installer feed, downloads the update, displays progress, and offers **Restart & Update**. Markdown by itself cannot install an update.
+The notification endpoint must return the generated JSON with the matching top-level `clientId`. The Windows update directory serves `latest.yml` and `release.json`. `latest.yml` points to the matching installer and blockmap attached to a client-specific public GitHub release. The app checks `clientId`, app ID, and version in `release.json` before downloading. The publisher uploads the installer first, then `release.json`, `latest.yml`, and finally the notification. A Markdown notice with `updateAvailable: true` shows the configured button; clicking it checks the actual installer feed, downloads the update, displays progress, and offers **Restart & Update**. Markdown by itself cannot install an update.
 
-The project source may be private, but installed apps need access to these HTTPS feeds. Do not embed a GitHub personal access token in the client installer. `electron-builder` produces the Windows update metadata when `updateFeedUrl` is configured. `npm run desktop:dist` builds locally without uploading files. A separate publishing workflow is required to put notification JSON and installer artifacts at the configured URLs. The first updater-enabled installer must be sent to existing clients once. Keep each client's `clientId`, app ID, and feed path stable; SQLite data remains under `%APPDATA%\OfflinePOS\<clientId>\pos-data`.
+The project source remains private. Create an empty **public** repository `sanjuconnectrader/pos-system-updates` with a README and a `main` branch. Install GitHub CLI (`winget install --id GitHub.cli`), reopen PowerShell, and run `gh auth login`. Create the downloads repository on GitHub's website, or from a directory outside the POS source run `gh repo create sanjuconnectrader/pos-system-updates --public --add-readme`. Do not pass `--source .` from this project. That public repository holds only downloads and feeds, never POS source, passwords, provisioning manifests, or developer keys. `electron-builder` produces Windows update metadata when `updateFeedUrl` is configured. The first updater-enabled installer must be sent to clients once: Downtown Coffee POS 1.1.3 has no feed address inside it, so a Git push cannot reach that installed version. Keep each client's `clientId`, app ID, and feed path stable; SQLite data remains under `%APPDATA%\OfflinePOS\<clientId>\pos-data`.
 
-Register each client ID in `frontend/clients/<clientId>.json` without credentials. After the project has a Git remote, run `npm run push-client` from `frontend` to select the target, change type, message, and confirm before committing and pushing. The script writes release metadata to `frontend/update-metadata/` and a notice to `frontend/notifications/` for notification-related changes, and refuses to stage known secret and database paths. It does **not** publish releases by itself; connect GitHub Actions or another deployment system to the feed before expecting installed apps to see pushed notices. Direct `git push` bypasses this optional custom command.
+Register each client ID in `frontend/clients/<clientId>.json` without credentials. Once the public downloads repository and `gh` login are ready, run `npm run push-client` from `frontend`. Choose one client and **Software update**. The script increases the version, selects that client, creates a notice, builds its installer, checks staged files for secrets, commits and pushes the private source, creates a client-specific public GitHub release, then publishes that client's feed and notification. Other clients' feed paths are left alone. The **Notification**, **Bug fix**, and **New feature** choices publish a notice without rebuilding the app; use **Software update** whenever the client needs new executable code. `all-clients` supports notices only. A direct `git push` does not run this workflow.
+
+If the source push succeeds but feed publishing fails, do not bump the version again. Fix the reported cause and retry `npm run client:publish -- <clientId>` from `frontend` for the already built version. For a notice-only retry, run `npm run notifications:export` and then `npm run client:publish -- <clientId> --notifications-only`.
