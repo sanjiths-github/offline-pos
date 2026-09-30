@@ -90,6 +90,8 @@ route('post','/system/business',authenticate,system,(req,res)=>{
   const b=req.body;
   const output=transaction(()=>{
     db.prepare('INSERT INTO businesses(id,name,owner_name,address_line_1,address_line_2,city,state,zip_code,phone,email,tax_id,currency,timezone,default_tax_rate_bps,receipt_footer) VALUES(1,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(required(b.name,'name'),required(b.ownerName,'ownerName'),b.addressLine1||'',b.addressLine2||'',b.city||'',b.state||'',b.zipCode||'',b.phone||'',b.email||'',b.taxId||'','USD',b.timezone||'America/New_York',integer(b.defaultTaxRateBps??0,'defaultTaxRateBps',0,10000),b.receiptFooter||'Thank you for your business!');
+    const addHours=db.prepare('INSERT INTO business_hours(business_id,day_of_week,is_closed) VALUES(1,?,1)');
+    for(let day=0;day<7;day++) addHours.run(day);
     const user=createUser({username:b.adminUsername},'BUSINESS_ADMIN',req.user.id);
     audit(req.user.id,'BUSINESS_CREATED','businesses',1,{name:b.name});
     return {business:db.prepare('SELECT * FROM businesses WHERE id=1').get(),admin:user};
@@ -119,6 +121,7 @@ route('patch','/business',authenticate,admin,(req,res)=>{
     if (!Array.isArray(b.hours)||b.hours.length!==7) fail('Hours must include all seven days');
     const days = new Set();
     hours = b.hours.map(row=>{
+      if (!row || typeof row!=='object') fail('Invalid business day');
       const day=integer(row.dayOfWeek,'dayOfWeek',0,6);
       if (days.has(day)) fail('Duplicate business day');
       days.add(day);

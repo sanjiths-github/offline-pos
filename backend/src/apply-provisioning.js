@@ -27,6 +27,8 @@ try {
     business.email || '', business.taxId || '', business.currency || 'USD',
     business.timezone || 'America/New_York', business.defaultTaxRateBps || 0,
     business.receiptFooter || 'Thank you for your business!');
+  const addHours=db.prepare('INSERT INTO business_hours(business_id,day_of_week,is_closed) VALUES(1,?,1)');
+  for(let day=0;day<7;day++) addHours.run(day);
   db.prepare("INSERT INTO users(username,password_hash,role,must_change_password) VALUES(?,?,'BUSINESS_ADMIN',1)").run(admin.username,admin.passwordHash);
   db.prepare('INSERT INTO app_settings(key,value) VALUES(?,?)').run('client_id',clientId);
   db.prepare('INSERT INTO app_settings(key,value) VALUES(?,?)').run('developer_key_hash',developerKeyHash);

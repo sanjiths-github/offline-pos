@@ -19,8 +19,6 @@ const emptyInsights: DashboardInsights = { weeklySales: [], topItems: [] };
 const readSession = () => { try { return sessionStorage.getItem('pos-session'); } catch { return null; } };
 const saveSession = (value: Session) => { try { sessionStorage.setItem('pos-session', JSON.stringify(value)); } catch { /* Session stays usable in memory. */ } };
 const clearSession = () => { try { sessionStorage.removeItem('pos-session'); } catch { /* Storage may be unavailable. */ } };
-type Shift = { username?: string; opening_cash_cents: number; opened_at: string; status: string };
-type PrinterInfo = { name: string; connection_type: string; receipt_width: number; is_active?: number };
 
 export default function Home() {
   const [page, setPage] = useState<Page>('dashboard');
@@ -30,9 +28,6 @@ export default function Home() {
   const [insights, setInsights] = useState<DashboardInsights>(emptyInsights);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [openShift, setOpenShift] = useState<Shift | null>(null);
-  const [activePrinter, setActivePrinter] = useState<PrinterInfo | null>(null);
-  const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [taxRateBps, setTaxRateBps] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<'loading' | 'login' | 'change' | 'ready'>('login');
@@ -83,18 +78,15 @@ export default function Home() {
 
   async function refresh(current: Session) {
     const token = current.token;
-    const [cats, prods, history, shifts, business, printers, dashboardInsights] = await Promise.all([
+    const [cats, prods, history, business, dashboardInsights] = await Promise.all([
       api<Category[]>('/categories', 'GET', undefined, token), api<Product[]>('/products', 'GET', undefined, token),
-      api<Sale[]>('/sales', 'GET', undefined, token), api<Shift[]>('/shifts', 'GET', undefined, token),
+      api<Sale[]>('/sales', 'GET', undefined, token),
       api<BusinessProfile>('/business','GET',undefined,token),
-      api<PrinterInfo[]>('/printer','GET',undefined,token),
       api<DashboardInsights>('/dashboard/insights','GET',undefined,token)
     ]);
     setCategories(cats); setProducts(prods); setSales(history);
     setTaxRateBps(business.default_tax_rate_bps);
     setBusinessProfile(business); setInsights(dashboardInsights);
-    setActivePrinter(printers.find(printer => printer.is_active) || null);
-    setOpenShift(shifts.find(shift => shift.status === 'OPEN') || null);
     const today = deviceDate();
     const todaySales = await api<Sale[]>(`/sales?from=${today}&to=${today}`, 'GET', undefined, token);
     const completedToday = todaySales.filter(sale => sale.status === 'COMPLETED');
@@ -104,7 +96,6 @@ export default function Home() {
       orderSources: (['POS', 'PHONE'] as const).map(order_source => ({ order_source, orders: completedToday.filter(s => s.order_source === order_source).length, revenue_cents: completedToday.filter(s => s.order_source === order_source).reduce((n, s) => n + s.total_cents, 0) })),
       payments: (['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'OTHER'] as const).map(method => ({ method, orders: completedToday.filter(s => s.payment_method === method).length, revenue_cents: completedToday.filter(s => s.payment_method === method).reduce((n, s) => n + s.total_cents, 0) }))
     });
-    if (current.user.role === 'BUSINESS_ADMIN') setLastBackup((await api<string[]>('/backups', 'GET', undefined, token))[0] || null);
   }
 
   async function signIn(event: React.FormEvent) {
@@ -134,7 +125,7 @@ export default function Home() {
     if (session) await api('/auth/logout', 'POST', {}, session.token).catch(() => {});
     clearSession(); setSession(null); setStatus('login');
     setPassword(''); setCategories([]); setProducts([]); setSales([]); setReport(emptyReport);
-    setOpenShift(null); setActivePrinter(null); setLastBackup(null); setBusinessProfile(null); setInsights(emptyInsights); setPage('dashboard');
+    setBusinessProfile(null); setInsights(emptyInsights); setPage('dashboard');
   }
   function navigate(next: Page) { setPage(next); setMobileSidebar(false); }
   function completed(sale: Sale) { setSales(current => [sale, ...current]); if (session) refresh(session).catch(() => {}); }
