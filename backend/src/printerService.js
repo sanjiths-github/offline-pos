@@ -1,11 +1,12 @@
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { db } = require('./db');
+const { deviceDateTime } = require('./deviceTime');
 const money = cents => '$'+(cents/100).toFixed(2);
 function renderReceipt(sale) {
   const business=db.prepare('SELECT * FROM businesses WHERE id=1').get();
   const width=db.prepare('SELECT receipt_width FROM printer_settings WHERE is_active=1 ORDER BY id LIMIT 1').get()?.receipt_width===58?32:48;
-  const line='-'.repeat(width), lines=[business.name,business.address_line_1,[business.city,business.state,business.zip_code].filter(Boolean).join(' '),business.phone,line,`Receipt: ${sale.receipt_number}`,`Date: ${sale.completed_at}`,`Cashier: ${sale.cashier}`,`Order: ${sale.order_type} / ${sale.order_source}`];
+  const line='-'.repeat(width), lines=[business.name,business.address_line_1,[business.city,business.state,business.zip_code].filter(Boolean).join(' '),business.phone,line,`Receipt: ${sale.receipt_number}`,`Date: ${deviceDateTime(sale.completed_at)}`,`Cashier: ${sale.cashier}`,`Order: ${sale.order_type} / ${sale.order_source}`];
   if(sale.table_number)lines.push(`Table: ${sale.table_number}`);
   if(sale.customer_name)lines.push(`Customer: ${sale.customer_name}`);
   if(sale.customer_phone)lines.push(`Phone: ${sale.customer_phone}`);

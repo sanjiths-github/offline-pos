@@ -124,6 +124,10 @@ npm run build
 
 The Electron renderer uses a restricted preload bridge to call the Express API. The API validates the session and calculates final billing amounts. Dashboard and Today's Sales show current sales; Sales History filters by date and day period and opens receipt details. Billing can complete a sale with or without printing. Sales History can print the receipt later. Menus lets business admins remove individual products or a category with its products; past sales retain their item snapshots.
 
+### Device date and time
+
+The POS reads the date, time, and timezone from the computer running it. The navbar clock, Today's Sales, day-period filters, reports, receipt dates, and daily backup schedule follow that computer's local time. Sale timestamps remain stored in UTC in SQLite so older records are not rewritten when the device timezone changes; the app converts them for display and filtering. Make sure Windows date, time, and timezone are set correctly on each client's computer. These source changes must be included in a new desktop installer before an installed client sees them.
+
 Printer Connection lists receipt printer queues installed in Windows, including USB cable and paired Bluetooth printers. Choose one, connect it to the POS, and use Test Print. Disconnect stops the POS from sending new receipts; it does not uninstall the Windows printer. The nearby Bluetooth scan in Electron uses Web Bluetooth for discoverable Bluetooth LE devices. Classic Bluetooth printers may only appear after pairing in Windows. In both cases Windows must expose a printer queue before the POS can print; printer drivers and pairing are managed by Windows. Windows queue status is shown on the page, but a successful Test Print is the practical connection check.
 
 ## Client notifications and updates

@@ -6,6 +6,7 @@ const path = require('node:path');
 process.env.POS_DATA_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pos-test-'));
 const app=require('../src/server');
 const { db, hashPassword }=require('../src/security');
+const { deviceDate, deviceDateTime }=require('../src/deviceTime');
 
 test('offline acceptance flow',async t=>{
   const server=app.listen(0,'127.0.0.1');
@@ -44,6 +45,11 @@ test('offline acceptance flow',async t=>{
   assert.equal(sale.payment.change_cents,485);
   assert.equal(sale.status,'COMPLETED');
   assert.equal(sale.printJobs.length,0);
+  const cashierInsights=await call('GET','/dashboard/insights');
+  assert.equal(cashierInsights.weeklySales.length,7);
+  assert.equal(cashierInsights.weeklySales.reduce((sum,day)=>sum+day.revenue_cents,0),1515);
+  assert.equal(cashierInsights.topItems[0].name,'Cappuccino');
+  assert.equal(cashierInsights.topItems[0].quantity,2);
   const again=await call('POST',`/sales/${sale.id}/checkout`,{idempotencyKey:key,paymentMethod:'CASH',cashReceivedCents:2000});
   assert.equal(again.id,sale.id);
   assert.equal((await call('PUT',`/sales/${sale.id}/items/${latte.id}`,{quantity:4},409)).error,'Sale is locked');
@@ -53,11 +59,22 @@ test('offline acceptance flow',async t=>{
   const reprint=await call('POST',`/sales/${sale.id}/reprint`,{});
   assert.ok(reprint.id>0);
   assert.equal((await call('GET',`/sales/${sale.id}/print-jobs`)).length,1);
-  assert.match((await call('GET',`/sales/${sale.id}/receipt-preview`)).text,/Cappuccino/);
+  const receiptPreview=(await call('GET',`/sales/${sale.id}/receipt-preview`)).text;
+  assert.match(receiptPreview,/Cappuccino/);
+  assert.ok(receiptPreview.includes(deviceDateTime(sale.completed_at)));
   const shift=(await call('GET','/shifts'))[0];
   const closed=await call('POST',`/shifts/${shift.id}/close`,{actualCashCents:11515});
   assert.equal(closed.difference_cents,0);
   login=await call('POST','/auth/login',{username:'downtownadmin',password:'StrongOwner#123'});token=login.token;
+  const hours=Array.from({length:7},(_,day)=>({dayOfWeek:day,isClosed:day===0,openingTime:day===0?null:'09:00',closingTime:day===0?null:(day===6?'15:00':'18:00')}));
+  const profile=await call('PATCH','/business',{name:'Downtown Coffee House',ownerName:'Jane Smith',phone:'5125551234',addressLine1:'10 Main Street',city:'Austin',hours});
+  assert.equal(profile.owner_name,'Jane Smith');
+  assert.equal(profile.hours.length,7);
+  assert.equal(profile.hours[0].is_closed,1);
+  assert.equal(profile.hours[6].closing_time,'15:00');
+  assert.equal((await call('GET','/business')).phone,'5125551234');
+  await call('PATCH','/business',{hours:[...hours.slice(0,6),hours[0]]},400);
+  assert.equal((await call('GET','/business')).hours[6].closing_time,'15:00');
   const customer=await call('POST','/customers',{name:'Michael Brown',phone:'5125559988'});
   assert.equal((await call('GET','/customers?phone=5125559988'))[0].id,customer.id);
   await call('PATCH',`/customers/${customer.id}`,{name:'Michael B',phone:'5125559988'});
@@ -70,11 +87,21 @@ test('offline acceptance flow',async t=>{
   assert.equal((await call('GET','/categories')).length,0);
   assert.equal((await call('GET','/products')).length,0);
   assert.equal((await call('GET',`/sales/${sale.id}`)).items.length,2);
-  const date=new Date().toISOString().slice(0,10);
+  const date=deviceDate();
   const report=await call('GET',`/reports/sales?from=${date}&to=${date}`);
   assert.equal(report.totals.orders,1);
   assert.equal(report.orderSources.find(x=>x.order_source==='PHONE').orders,1);
   assert.equal((await call('GET',`/reports/products?from=${date}&to=${date}`)).length,2);
+  if (new Date().getTimezoneOffset() !== 0) {
+    const edgeUtc = new Date().getTimezoneOffset() < 0 ? '2026-09-30 23:30:00' : '2026-09-30 00:30:00';
+    const localDay = deviceDate(new Date(edgeUtc.replace(' ', 'T') + 'Z'));
+    const originalCompletedAt = sale.completed_at;
+    db.prepare('UPDATE sales SET completed_at=? WHERE id=?').run(edgeUtc, sale.id);
+    assert.ok((await call('GET',`/sales?from=${localDay}&to=${localDay}`)).some(row => row.id === sale.id));
+    assert.equal((await call('GET',`/reports/sales?from=${localDay}&to=${localDay}`)).totals.orders, 1);
+    assert.equal((await call('GET',`/reports/sales?from=${edgeUtc.slice(0,10)}&to=${edgeUtc.slice(0,10)}`)).totals.orders, 0);
+    db.prepare('UPDATE sales SET completed_at=? WHERE id=?').run(originalCompletedAt, sale.id);
+  }
   const afterCategory=await call('POST','/categories',{name:'Tea'},201);
   const tea=await call('POST','/products',{name:'Tea',categoryId:afterCategory.id,priceCents:300},201);
   let printedSale=await call('POST','/sales',{orderType:'TAKEAWAY',orderSource:'POS'},201);

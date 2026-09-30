@@ -7,6 +7,7 @@ const { integer, persistCalculation } = require('./billing');
 const { dbPath, dataDir } = require('./db');
 const { renderReceipt, printSale, listSystemPrinters, testPrinter } = require('./printerService');
 const { createBackup, automaticBackup, restoreBackup, listBackups } = require('./backupService');
+const { deviceDate, sqliteUtcDate, deviceDateTime } = require('./deviceTime');
 
 const app = express();
 app.disable('x-powered-by');
@@ -97,7 +98,11 @@ route('post','/system/business',authenticate,system,(req,res)=>{
 route('post','/system/users/:id/reset-password',authenticate,system,(req,res)=>{const u=db.prepare('SELECT * FROM users WHERE id=?').get(id(req));if (!u||u.role!=='BUSINESS_ADMIN') fail('Business admin not found',404);send(res,resetUser(u,req.user.id));});
 route('patch','/system/business/status',authenticate,system,(req,res)=>{const status=enumValue(req.body.status,['ACTIVE','INACTIVE'],'status');db.prepare('UPDATE businesses SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=1').run(status);audit(req.user.id,'BUSINESS_STATUS','businesses',1,{status});send(res,{status});});
 
-route('get','/business',authenticate,working,(req,res)=>send(res,db.prepare('SELECT * FROM businesses WHERE id=1').get()));
+const businessProfile = () => {
+  const business = db.prepare('SELECT * FROM businesses WHERE id=1').get();
+  return business ? { ...business, hours: db.prepare('SELECT day_of_week,is_closed,opening_time,closing_time FROM business_hours WHERE business_id=1 ORDER BY day_of_week').all() } : null;
+};
+route('get','/business',authenticate,working,(req,res)=>send(res,businessProfile()));
 route('patch','/business',authenticate,admin,(req,res)=>{
   const b=req.body, old=db.prepare('SELECT * FROM businesses WHERE id=1').get();
   if (!old) fail('Business missing',404);
@@ -105,9 +110,45 @@ route('patch','/business',authenticate,admin,(req,res)=>{
   const map={ownerName:'owner_name',addressLine1:'address_line_1',addressLine2:'address_line_2',zipCode:'zip_code',taxId:'tax_id',defaultTaxRateBps:'default_tax_rate_bps',receiptFooter:'receipt_footer'};
   const edits=Object.entries(b).map(([k,v])=>[map[k]||k,v]).filter(([k])=>fields.includes(k));
   if (edits.some(([k])=>k==='default_tax_rate_bps')) integer(edits.find(([k])=>k==='default_tax_rate_bps')[1],'defaultTaxRateBps',0,10000);
-  if (edits.length) db.prepare(`UPDATE businesses SET ${edits.map(([k])=>`${k}=?`).join(',')},updated_at=CURRENT_TIMESTAMP WHERE id=1`).run(...edits.map(([,v])=>v));
-  audit(req.user.id,'BUSINESS_UPDATED','businesses',1,{fields:edits.map(([k])=>k)});
-  send(res,db.prepare('SELECT * FROM businesses WHERE id=1').get());
+  for (const [key,value] of edits) {
+    if (key==='name'||key==='owner_name') required(value,key);
+    else if (key!=='default_tax_rate_bps' && (typeof value!=='string'||value.length>500)) fail(`Invalid ${key}`);
+  }
+  let hours;
+  if (b.hours!==undefined) {
+    if (!Array.isArray(b.hours)||b.hours.length!==7) fail('Hours must include all seven days');
+    const days = new Set();
+    hours = b.hours.map(row=>{
+      const day=integer(row.dayOfWeek,'dayOfWeek',0,6);
+      if (days.has(day)) fail('Duplicate business day');
+      days.add(day);
+      if (typeof row.isClosed!=='boolean') fail('Invalid closed status');
+      const opening=row.isClosed?null:row.openingTime;
+      const closing=row.isClosed?null:row.closingTime;
+      if (!row.isClosed && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(opening)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(closing)||opening===closing)) fail('Enter valid opening and closing times');
+      return {day,closed:row.isClosed?1:0,opening,closing};
+    });
+  }
+  transaction(()=>{
+    if (edits.length) db.prepare(`UPDATE businesses SET ${edits.map(([k])=>`${k}=?`).join(',')},updated_at=CURRENT_TIMESTAMP WHERE id=1`).run(...edits.map(([,v])=>v));
+    if (hours) {
+      const statement=db.prepare('INSERT INTO business_hours(business_id,day_of_week,is_closed,opening_time,closing_time) VALUES(1,?,?,?,?) ON CONFLICT(business_id,day_of_week) DO UPDATE SET is_closed=excluded.is_closed,opening_time=excluded.opening_time,closing_time=excluded.closing_time');
+      for (const row of hours) statement.run(row.day,row.closed,row.opening,row.closing);
+    }
+    audit(req.user.id,'BUSINESS_UPDATED','businesses',1,{fields:[...edits.map(([k])=>k),...(hours?['hours']:[])]});
+  });
+  send(res,businessProfile());
+});
+route('get','/dashboard/insights',authenticate,working,(req,res)=>{
+  const now=new Date(), monday=new Date(now.getFullYear(),now.getMonth(),now.getDate()-((now.getDay()+6)%7));
+  const dates=Array.from({length:7},(_,day)=>deviceDate(new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+day)));
+  const scope=req.user.role==='CASHIER'?'AND s.cashier_user_id=?':'';
+  const scoped=req.user.role==='CASHIER'?[req.user.id]:[];
+  const rows=db.prepare(`SELECT date(s.completed_at,'localtime') AS day,COUNT(*) AS orders,COALESCE(SUM(s.total_cents),0) AS revenue_cents FROM sales s WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ? ${scope} GROUP BY day`).all(dates[0],dates[6],...scoped);
+  const byDate=new Map(rows.map(row=>[row.day,row]));
+  const weeklySales=dates.map(date=>({date,orders:byDate.get(date)?.orders||0,revenue_cents:byDate.get(date)?.revenue_cents||0}));
+  const topItems=db.prepare(`SELECT si.product_name_snapshot AS name,si.category_name_snapshot AS category,SUM(si.quantity) AS quantity,SUM(si.line_total_cents) AS revenue_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' ${scope} GROUP BY si.product_name_snapshot,si.category_name_snapshot ORDER BY quantity DESC,revenue_cents DESC,name LIMIT 5`).all(...scoped);
+  send(res,{weeklySales,topItems});
 });
 route('get','/users',authenticate,admin,(req,res)=>send(res,db.prepare("SELECT id,employee_id,username,role,must_change_password,is_active,created_at,last_login_at FROM users WHERE role!='SYSTEM_ADMIN' ORDER BY id").all()));
 route('post','/users',authenticate,admin,(req,res)=>send(res,createUser(req.body,'CASHIER',req.user.id),201));
@@ -149,11 +190,12 @@ route('get','/sales',authenticate,working,(req,res)=>{
   const from=req.query.from,to=req.query.to,period=req.query.period||'ALL';
   if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(from&&to&&from>to))fail('Invalid date range');
   enumValue(period,['ALL','MORNING','NOON','EVENING','NIGHT'],'period');
-  const timezone=db.prepare('SELECT timezone FROM businesses WHERE id=1').get()?.timezone||'UTC';
-  const formatter=new Intl.DateTimeFormat('en-US',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'});
+  const formatter=new Intl.DateTimeFormat('en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'});
   const rows=db.prepare(`SELECT s.*,u.username AS cashier,p.method AS payment_method FROM sales s JOIN users u ON u.id=s.cashier_user_id LEFT JOIN payments p ON p.sale_id=s.id WHERE ${where.join(' AND ')} ORDER BY s.id DESC`).all(...params);
   const result=rows.filter(sale=>{
-    const parts=Object.fromEntries(formatter.formatToParts(new Date((sale.completed_at||sale.created_at).replace(' ','T')+'Z')).map(part=>[part.type,part.value]));
+    const stamp=sqliteUtcDate(sale.completed_at||sale.created_at);
+    if(!stamp)return false;
+    const parts=Object.fromEntries(formatter.formatToParts(stamp).map(part=>[part.type,part.value]));
     const date=`${parts.year}-${parts.month}-${parts.day}`,hour=Number(parts.hour);
     if(from&&date<from||to&&date>to)return false;
     if(period==='MORNING')return hour>=5&&hour<12;
@@ -196,26 +238,26 @@ route('post','/sales/:id/reprint',authenticate,working,(req,res)=>{const sale=ge
 route('get','/sales/:id/print-jobs',authenticate,working,(req,res)=>{const sale=getSale(id(req));saleAllowed(req,sale);send(res,db.prepare('SELECT id,status,error_message,created_at,printed_at FROM print_jobs WHERE sale_id=? ORDER BY id DESC LIMIT 10').all(sale.id));});
 route('get','/payments',authenticate,admin,(req,res)=>send(res,db.prepare('SELECT * FROM payments ORDER BY id DESC LIMIT 500').all()));
 function reportRange(req) {
-  const today=new Date().toISOString().slice(0,10),from=req.query.from||today,to=req.query.to||today;
+  const today=deviceDate(),from=req.query.from||today,to=req.query.to||today;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)fail('Invalid date range');
   return {from,to};
 }
 function salesReport(from,to) {
-  const args=[from,to], where="status='COMPLETED' AND date(completed_at) BETWEEN ? AND ?";
+  const args=[from,to], where="status='COMPLETED' AND date(completed_at,'localtime') BETWEEN ? AND ?";
   const totals=db.prepare(`SELECT COUNT(*) AS orders,COALESCE(SUM(subtotal_cents),0) AS subtotal_cents,COALESCE(SUM(discount_cents),0) AS discount_cents,COALESCE(SUM(tax_cents),0) AS tax_cents,COALESCE(SUM(total_cents),0) AS revenue_cents FROM sales WHERE ${where}`).get(...args);
   const orderTypes=db.prepare(`SELECT order_type,COUNT(*) AS orders,SUM(total_cents) AS revenue_cents FROM sales WHERE ${where} GROUP BY order_type`).all(...args);
   const orderSources=db.prepare(`SELECT order_source,COUNT(*) AS orders,SUM(total_cents) AS revenue_cents FROM sales WHERE ${where} GROUP BY order_source`).all(...args);
-  const payments=db.prepare("SELECT p.method,COUNT(*) AS orders,SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN sales s ON s.id=p.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at) BETWEEN ? AND ? GROUP BY p.method").all(...args);
+  const payments=db.prepare("SELECT p.method,COUNT(*) AS orders,SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN sales s ON s.id=p.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ? GROUP BY p.method").all(...args);
   return {from,to,totals,orderTypes,orderSources,payments};
 }
 route('get','/reports/sales',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,salesReport(from,to));});
-route('get','/reports/today',authenticate,admin,(req,res)=>{const today=new Date().toISOString().slice(0,10);send(res,salesReport(today,today));});
-route('get','/reports/products',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT si.product_name_snapshot AS name,SUM(si.quantity) AS quantity_sold,SUM(si.line_total_cents) AS revenue_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at) BETWEEN ? AND ? GROUP BY si.product_name_snapshot ORDER BY quantity_sold DESC").all(from,to));});
-route('get','/reports/categories',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT si.category_name_snapshot AS name,SUM(si.quantity) AS items_sold,SUM(si.line_total_cents) AS revenue_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at) BETWEEN ? AND ? GROUP BY si.category_name_snapshot ORDER BY revenue_cents DESC").all(from,to));});
-route('get','/reports/tax',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT COALESCE(SUM(CASE WHEN si.tax_rate_snapshot>0 THEN si.line_subtotal_cents-si.discount_cents ELSE 0 END),0) AS taxable_sales_cents,COALESCE(SUM(CASE WHEN si.tax_rate_snapshot=0 THEN si.line_subtotal_cents-si.discount_cents ELSE 0 END),0) AS exempt_sales_cents,COALESCE(SUM(si.tax_cents),0) AS tax_collected_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at) BETWEEN ? AND ?").get(from,to));});
-route('get','/reports/discounts',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT discount_type,COUNT(*) AS orders,COALESCE(SUM(discount_cents),0) AS discount_cents FROM sales WHERE status='COMPLETED' AND discount_cents>0 AND date(completed_at) BETWEEN ? AND ? GROUP BY discount_type").all(from,to));});
-route('get','/reports/cashiers',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT u.username,COUNT(s.id) AS orders,COALESCE(SUM(s.total_cents),0) AS revenue_cents,COALESCE(SUM(CASE WHEN p.method='CASH' THEN p.amount_cents ELSE 0 END),0) AS cash_cents,COALESCE(SUM(CASE WHEN p.method IN ('CREDIT_CARD','DEBIT_CARD') THEN p.amount_cents ELSE 0 END),0) AS card_cents FROM sales s JOIN users u ON u.id=s.cashier_user_id JOIN payments p ON p.sale_id=s.id WHERE s.status='COMPLETED' AND date(s.completed_at) BETWEEN ? AND ? GROUP BY s.cashier_user_id ORDER BY revenue_cents DESC").all(from,to));});
-route('get','/reports/export.csv',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);const rows=db.prepare("SELECT s.receipt_number,s.completed_at,u.username AS cashier,s.order_type,s.order_source,s.customer_name,s.customer_phone,s.subtotal_cents,s.discount_cents,s.tax_cents,s.total_cents,p.method FROM sales s JOIN users u ON u.id=s.cashier_user_id JOIN payments p ON p.sale_id=s.id WHERE s.status='COMPLETED' AND date(s.completed_at) BETWEEN ? AND ? ORDER BY s.id").all(from,to);const cols=['receipt_number','completed_at','cashier','order_type','order_source','customer_name','customer_phone','subtotal_cents','discount_cents','tax_cents','total_cents','method'];const csv=[cols.join(','),...rows.map(row=>cols.map(k=>'"'+String(row[k]??'').replaceAll('"','""')+'"').join(','))].join('\r\n');res.set('Content-Disposition',`attachment; filename="sales-${from}-${to}.csv"`).type('text/csv').send(csv);});
+route('get','/reports/today',authenticate,admin,(req,res)=>{const today=deviceDate();send(res,salesReport(today,today));});
+route('get','/reports/products',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT si.product_name_snapshot AS name,SUM(si.quantity) AS quantity_sold,SUM(si.line_total_cents) AS revenue_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ? GROUP BY si.product_name_snapshot ORDER BY quantity_sold DESC").all(from,to));});
+route('get','/reports/categories',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT si.category_name_snapshot AS name,SUM(si.quantity) AS items_sold,SUM(si.line_total_cents) AS revenue_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ? GROUP BY si.category_name_snapshot ORDER BY revenue_cents DESC").all(from,to));});
+route('get','/reports/tax',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT COALESCE(SUM(CASE WHEN si.tax_rate_snapshot>0 THEN si.line_subtotal_cents-si.discount_cents ELSE 0 END),0) AS taxable_sales_cents,COALESCE(SUM(CASE WHEN si.tax_rate_snapshot=0 THEN si.line_subtotal_cents-si.discount_cents ELSE 0 END),0) AS exempt_sales_cents,COALESCE(SUM(si.tax_cents),0) AS tax_collected_cents FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ?").get(from,to));});
+route('get','/reports/discounts',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT discount_type,COUNT(*) AS orders,COALESCE(SUM(discount_cents),0) AS discount_cents FROM sales WHERE status='COMPLETED' AND discount_cents>0 AND date(completed_at,'localtime') BETWEEN ? AND ? GROUP BY discount_type").all(from,to));});
+route('get','/reports/cashiers',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);send(res,db.prepare("SELECT u.username,COUNT(s.id) AS orders,COALESCE(SUM(s.total_cents),0) AS revenue_cents,COALESCE(SUM(CASE WHEN p.method='CASH' THEN p.amount_cents ELSE 0 END),0) AS cash_cents,COALESCE(SUM(CASE WHEN p.method IN ('CREDIT_CARD','DEBIT_CARD') THEN p.amount_cents ELSE 0 END),0) AS card_cents FROM sales s JOIN users u ON u.id=s.cashier_user_id JOIN payments p ON p.sale_id=s.id WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ? GROUP BY s.cashier_user_id ORDER BY revenue_cents DESC").all(from,to));});
+route('get','/reports/export.csv',authenticate,admin,(req,res)=>{const {from,to}=reportRange(req);const rows=db.prepare("SELECT s.receipt_number,s.completed_at,u.username AS cashier,s.order_type,s.order_source,s.customer_name,s.customer_phone,s.subtotal_cents,s.discount_cents,s.tax_cents,s.total_cents,p.method FROM sales s JOIN users u ON u.id=s.cashier_user_id JOIN payments p ON p.sale_id=s.id WHERE s.status='COMPLETED' AND date(s.completed_at,'localtime') BETWEEN ? AND ? ORDER BY s.id").all(from,to);const cols=['receipt_number','completed_at','cashier','order_type','order_source','customer_name','customer_phone','subtotal_cents','discount_cents','tax_cents','total_cents','method'];const csv=[cols.join(','),...rows.map(row=>cols.map(k=>'"'+String((k==='completed_at'?deviceDateTime(row[k]):row[k])??'').replaceAll('"','""')+'"').join(','))].join('\r\n');res.set('Content-Disposition',`attachment; filename="sales-${from}-${to}.csv"`).type('text/csv').send(csv);});
 
 route('get','/printer',authenticate,working,(req,res)=>send(res,db.prepare('SELECT * FROM printer_settings ORDER BY id').all()));
 route('get','/printer/devices',authenticate,working,async(req,res)=>send(res,await listSystemPrinters()));

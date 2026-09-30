@@ -1,18 +1,21 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { CalendarDays, Clock3, Coffee, History, LayoutDashboard, LogOut, Menu as MenuIcon, Printer, Search, ShoppingCart } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Building2, CalendarDays, Clock3, Coffee, History, LayoutDashboard, LogOut, Menu as MenuIcon, Printer, Search, ShoppingCart } from 'lucide-react';
 import Dashboard from '@/components/dashboard';
 import Billing from '@/components/billing';
 import Menus from '@/components/menus';
 import Sales from '@/components/sales';
 import PrinterConnection from '@/components/printer-connection';
+import BusinessProfilePage from '@/components/business-profile';
 import NotificationCenter from '@/components/notification-center';
 import clientBrand from '@/branding/client.json';
 import { api, logIn } from '@/lib/api';
-import type { Category, Page, Product, Report, Sale, Session } from '@/lib/types';
+import { deviceDate } from '@/lib/device-time';
+import type { BusinessProfile, Category, DashboardInsights, Page, Product, Report, Sale, Session } from '@/lib/types';
 
-const navigation = [{ id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard }, { id: 'billing', label: 'Billing', Icon: ShoppingCart }, { id: 'today', label: "Today's Sales", Icon: CalendarDays }, { id: 'history', label: 'Sales History', Icon: History }, { id: 'menus', label: 'Menus', Icon: MenuIcon }, { id: 'printer', label: 'Printer Connection', Icon: Printer }] as const;
+const navigation = [{ id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard }, { id: 'billing', label: 'Billing', Icon: ShoppingCart }, { id: 'today', label: "Today's Sales", Icon: CalendarDays }, { id: 'history', label: 'Sales History', Icon: History }, { id: 'menus', label: 'Menus', Icon: MenuIcon }, { id: 'printer', label: 'Printer Connection', Icon: Printer }, { id: 'profile', label: 'Business Profile', Icon: Building2 }] as const;
 const emptyReport: Report = { totals: { orders: 0, revenue_cents: 0, subtotal_cents: 0, discount_cents: 0, tax_cents: 0 }, orderTypes: [], orderSources: [], payments: [] };
+const emptyInsights: DashboardInsights = { weeklySales: [], topItems: [] };
 const readSession = () => { try { return sessionStorage.getItem('pos-session'); } catch { return null; } };
 const saveSession = (value: Session) => { try { sessionStorage.setItem('pos-session', JSON.stringify(value)); } catch { /* Session stays usable in memory. */ } };
 const clearSession = () => { try { sessionStorage.removeItem('pos-session'); } catch { /* Storage may be unavailable. */ } };
@@ -24,12 +27,13 @@ export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [report, setReport] = useState<Report>(emptyReport);
+  const [insights, setInsights] = useState<DashboardInsights>(emptyInsights);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [openShift, setOpenShift] = useState<Shift | null>(null);
   const [activePrinter, setActivePrinter] = useState<PrinterInfo | null>(null);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [taxRateBps, setTaxRateBps] = useState(0);
-  const [businessTimezone, setBusinessTimezone] = useState('UTC');
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<'loading' | 'login' | 'change' | 'ready'>('login');
   const [brand] = useState({ name: clientBrand.name, tagline: clientBrand.tagline });
@@ -42,12 +46,20 @@ export default function Home() {
   const [globalSearch, setGlobalSearch] = useState('');
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [clock, setClock] = useState<Date | null>(null);
+  const lastBusinessDay = useRef<string | null>(null);
 
   useEffect(() => {
     setClock(new Date());
     const timer = window.setInterval(() => setClock(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const currentDay = clock ? deviceDate(clock) : null;
+  useEffect(() => {
+    if (!currentDay || status !== 'ready' || !session) return;
+    if (lastBusinessDay.current && lastBusinessDay.current !== currentDay) refresh(session).catch(() => {});
+    lastBusinessDay.current = currentDay;
+  }, [currentDay, status, session]);
 
   useEffect(() => {
     const saved = readSession();
@@ -71,19 +83,19 @@ export default function Home() {
 
   async function refresh(current: Session) {
     const token = current.token;
-    const [cats, prods, history, shifts, business, printers] = await Promise.all([
+    const [cats, prods, history, shifts, business, printers, dashboardInsights] = await Promise.all([
       api<Category[]>('/categories', 'GET', undefined, token), api<Product[]>('/products', 'GET', undefined, token),
       api<Sale[]>('/sales', 'GET', undefined, token), api<Shift[]>('/shifts', 'GET', undefined, token),
-      api<{ default_tax_rate_bps: number; timezone: string }>('/business','GET',undefined,token),
-      api<PrinterInfo[]>('/printer','GET',undefined,token)
+      api<BusinessProfile>('/business','GET',undefined,token),
+      api<PrinterInfo[]>('/printer','GET',undefined,token),
+      api<DashboardInsights>('/dashboard/insights','GET',undefined,token)
     ]);
     setCategories(cats); setProducts(prods); setSales(history);
     setTaxRateBps(business.default_tax_rate_bps);
-    setBusinessTimezone(business.timezone || 'UTC');
+    setBusinessProfile(business); setInsights(dashboardInsights);
     setActivePrinter(printers.find(printer => printer.is_active) || null);
     setOpenShift(shifts.find(shift => shift.status === 'OPEN') || null);
-    const dateParts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: business.timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(part => [part.type, part.value]));
-    const today = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+    const today = deviceDate();
     const todaySales = await api<Sale[]>(`/sales?from=${today}&to=${today}`, 'GET', undefined, token);
     const completedToday = todaySales.filter(sale => sale.status === 'COMPLETED');
     const totals = completedToday.reduce((result, sale) => ({ orders: result.orders + 1, revenue_cents: result.revenue_cents + sale.total_cents, subtotal_cents: result.subtotal_cents + sale.subtotal_cents, discount_cents: result.discount_cents + sale.discount_cents, tax_cents: result.tax_cents + sale.tax_cents }), { ...emptyReport.totals });
@@ -122,15 +134,16 @@ export default function Home() {
     if (session) await api('/auth/logout', 'POST', {}, session.token).catch(() => {});
     clearSession(); setSession(null); setStatus('login');
     setPassword(''); setCategories([]); setProducts([]); setSales([]); setReport(emptyReport);
-    setOpenShift(null); setActivePrinter(null); setLastBackup(null); setPage('dashboard');
+    setOpenShift(null); setActivePrinter(null); setLastBackup(null); setBusinessProfile(null); setInsights(emptyInsights); setPage('dashboard');
   }
   function navigate(next: Page) { setPage(next); setMobileSidebar(false); }
   function completed(sale: Sale) { setSales(current => [sale, ...current]); if (session) refresh(session).catch(() => {}); }
-  const title: Record<Page,string> = { dashboard: 'Dashboard', billing: 'Billing', today: "Today's Sales", history: 'Sales History', menus: 'Menus', printer: 'Printer Connection' };
-  const currentHour = clock ? Number(new Intl.DateTimeFormat('en-US', { timeZone: businessTimezone, hour: 'numeric', hourCycle: 'h23' }).format(clock)) : 12;
+  const title: Record<Page,string> = { dashboard: 'Dashboard', billing: 'Billing', today: "Today's Sales", history: 'Sales History', menus: 'Menus', printer: 'Printer Connection', profile: 'Business Profile' };
+  const displayName = businessProfile?.name || brand.name;
+  const currentHour = clock ? clock.getHours() : 12;
   const greeting = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
-  const dateLabel = clock ? new Intl.DateTimeFormat(undefined, { timeZone: businessTimezone, weekday: 'long', month: 'long', day: 'numeric' }).format(clock) : '';
-  const timeLabel = clock ? new Intl.DateTimeFormat(undefined, { timeZone: businessTimezone, hour: 'numeric', minute: '2-digit' }).format(clock) : '--:--';
+  const dateLabel = clock ? new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(clock) : '';
+  const timeLabel = clock ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(clock) : '--:--';
 
   if (status !== 'ready' || !session) return <div className="auth-screen">
     <div className="auth-card">
@@ -152,20 +165,21 @@ export default function Home() {
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileSidebar ? 'open' : ''}`}>
-      <div className="brand-block"><div className="brand-top"><img src="./branding/logo.png" alt="Client logo" onError={event => { event.currentTarget.style.display = 'none'; }} /><div><strong>{brand.name}</strong><small>{brand.tagline}</small></div></div></div>
+      <div className="brand-block"><div className="brand-top"><img src="./branding/logo.png" alt="Client logo" onError={event => { event.currentTarget.style.display = 'none'; }} /><div><strong>{displayName}</strong><small>{brand.tagline}</small></div></div></div>
       <div className="sidebar-section-label">WORKSPACE</div>
       <nav className="sidebar-nav" aria-label="Main navigation">{navigation.map(({ id, label, Icon }) => <button key={id} onClick={() => navigate(id)} className={page === id ? 'active' : ''}><Icon size={21} strokeWidth={2.1} /><span>{label}</span></button>)}</nav>
       <div className="clean-sidebar-footer"><button onClick={signOut}><LogOut size={18} /> Log out</button></div>
     </aside>
     {mobileSidebar && <div className="mobile-scrim" onClick={() => setMobileSidebar(false)} />}
     <div className="main-area">
-      <header className="topbar"><div className="header-left"><button className="mobile-menu" onClick={() => setMobileSidebar(true)} aria-label="Open menu"><MenuIcon size={22} /></button><div className="heading"><h1>{page === 'dashboard' ? greeting : title[page]}</h1><p>{page === 'dashboard' ? dateLabel : brand.name}</p></div></div><div className="header-right"><div className="global-search"><Search size={18} /><input placeholder="Search menu items…" value={globalSearch} onChange={event => { setGlobalSearch(event.target.value); if (event.target.value) setPage('menus'); }} /></div><div className="clean-clock"><Clock3 size={17} /><span>{timeLabel}</span></div><NotificationCenter clientId={clientBrand.clientId} userId={session.user.id} /><span className="clean-user" title={session.user.username}><span className="avatar">{session.user.username.slice(0, 1).toUpperCase()}</span><span>{session.user.username}</span></span></div></header>
+      <header className="topbar"><div className="header-left"><button className="mobile-menu" onClick={() => setMobileSidebar(true)} aria-label="Open menu"><MenuIcon size={22} /></button><div className="heading"><h1>{page === 'dashboard' ? greeting : title[page]}</h1><p>{page === 'dashboard' ? dateLabel : displayName}</p></div></div><div className="header-right"><div className="global-search"><Search size={18} /><input placeholder="Search menu items…" value={globalSearch} onChange={event => { setGlobalSearch(event.target.value); if (event.target.value) setPage('menus'); }} /></div><div className="clean-clock"><Clock3 size={17} /><span>{timeLabel}</span></div><NotificationCenter clientId={clientBrand.clientId} userId={session.user.id} /><span className="clean-user" title={session.user.username}><span className="avatar">{session.user.username.slice(0, 1).toUpperCase()}</span><span>{session.user.username}</span></span></div></header>
       <main className="content">
-        {page === 'dashboard' && <Dashboard report={report} sales={sales} categories={categories} products={products} shift={openShift} printer={activePrinter} lastBackup={lastBackup} timezone={businessTimezone} onBilling={() => navigate('billing')} onMenus={() => navigate('menus')} onToday={() => navigate('today')} onHistory={() => navigate('history')} onPrinter={() => navigate('printer')} />}
+        {page === 'dashboard' && <Dashboard report={report} sales={sales} products={products} insights={insights} onBilling={() => navigate('billing')} onMenus={() => navigate('menus')} onToday={() => navigate('today')} onHistory={() => navigate('history')} />}
         {page === 'billing' && <Billing categories={categories} products={products} token={session.token} taxRateBps={taxRateBps} onComplete={completed} />}
-        {(page === 'today' || page === 'history') && <Sales token={session.token} todayOnly={page === 'today'} timezone={businessTimezone} />}
+        {(page === 'today' || page === 'history') && <Sales token={session.token} todayOnly={page === 'today'} />}
         {page === 'printer' && <PrinterConnection token={session.token} canEdit={session.user.role === 'BUSINESS_ADMIN'} onChange={() => refresh(session).catch(() => {})} />}
         {page === 'menus' && <Menus categories={categories} products={products} token={session.token} demo={false} canEdit={session.user.role === 'BUSINESS_ADMIN'} initialSearch={globalSearch} onCategories={setCategories} onProducts={setProducts} />}
+        {page === 'profile' && businessProfile && <BusinessProfilePage profile={businessProfile} token={session.token} canEdit={session.user.role === 'BUSINESS_ADMIN'} onSaved={setBusinessProfile} />}
       </main>
     </div>
   </div>;

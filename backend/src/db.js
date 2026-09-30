@@ -9,6 +9,7 @@ db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=50
 db.exec(`
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS businesses(id INTEGER PRIMARY KEY CHECK(id=1), name TEXT NOT NULL, owner_name TEXT NOT NULL, address_line_1 TEXT DEFAULT '', address_line_2 TEXT DEFAULT '', city TEXT DEFAULT '', state TEXT DEFAULT '', zip_code TEXT DEFAULT '', phone TEXT DEFAULT '', email TEXT DEFAULT '', tax_id TEXT DEFAULT '', currency TEXT NOT NULL DEFAULT 'USD', timezone TEXT NOT NULL DEFAULT 'America/New_York', default_tax_rate_bps INTEGER NOT NULL DEFAULT 0 CHECK(default_tax_rate_bps BETWEEN 0 AND 10000), receipt_footer TEXT DEFAULT 'Thank you for your business!', status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','INACTIVE')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS business_hours(business_id INTEGER NOT NULL REFERENCES businesses(id), day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6), is_closed INTEGER NOT NULL DEFAULT 1 CHECK(is_closed IN (0,1)), opening_time TEXT, closing_time TEXT, PRIMARY KEY(business_id,day_of_week));
 CREATE TABLE IF NOT EXISTS employees(id INTEGER PRIMARY KEY, employee_code TEXT, first_name TEXT NOT NULL, last_name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT, address_line_1 TEXT, address_line_2 TEXT, city TEXT, state TEXT, zip_code TEXT, job_role TEXT NOT NULL, salary_cents INTEGER NOT NULL DEFAULT 0 CHECK(salary_cents>=0), salary_type TEXT NOT NULL DEFAULT 'HOURLY' CHECK(salary_type IN ('HOURLY','WEEKLY','MONTHLY','ANNUAL')), hire_date TEXT, employment_status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(employment_status IN ('ACTIVE','INACTIVE','TERMINATED')), notes TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, employee_id INTEGER REFERENCES employees(id), username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('SYSTEM_ADMIN','BUSINESS_ADMIN','CASHIER')), must_change_password INTEGER NOT NULL DEFAULT 1, temporary_password_expires_at TEXT, password_changed_at TEXT, failed_login_attempts INTEGER NOT NULL DEFAULT 0, locked_until TEXT, is_active INTEGER NOT NULL DEFAULT 1, session_version INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_login_at TEXT);
 CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), session_version INTEGER NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -27,4 +28,9 @@ CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NUL
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
 INSERT OR IGNORE INTO app_settings(key,value) VALUES ('auto_backup','true'),('backup_keep','30'),('last_backup_date','');
 `);
+const existingBusiness = db.prepare('SELECT id FROM businesses WHERE id=1').get();
+if (existingBusiness) {
+  const addHours = db.prepare('INSERT OR IGNORE INTO business_hours(business_id,day_of_week,is_closed) VALUES(1,?,1)');
+  for (let day = 0; day < 7; day++) addHours.run(day);
+}
 module.exports = { db, dbPath, dataDir };

@@ -1,13 +1,16 @@
 {
-  "clientId": "pizza-hut",
-  "name": "Pizza Hut",
-  "appName": "pizza",
-  "tagline": "Fresh pizza, ready to serve",
-  "logo": "pizza-hut-logo.svg",
+  "clientId": "downtown-coffee-house",
+  "name": "Downtown Coffee House",
+  "appName": "Downtown Coffee POS",
+  "tagline": "GOOD COFFEE. BRIGHTER DAYS.",
+  "logo": "client-logo.svg",
+  "ownerName": "John Smith",
+  "city": "Austin",
+  "state": "Texas",
   "currency": "USD",
-  "timezone": "America/New_York",
-  "defaultTaxRateBps": 0,
-  "sampleData": false,
-  "notificationFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/pizza-hut/notifications.json",
-  "updateFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/pizza-hut/windows/"
+  "timezone": "America/Chicago",
+  "defaultTaxRateBps": 825,
+  "sampleData": true,
+  "notificationFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/notifications.json",
+  "updateFeedUrl": "https://raw.githubusercontent.com/sanjuconnectrader/pos-system-updates/main/downtown-coffee-house/windows/"
 }

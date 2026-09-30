@@ -1,4 +1,7 @@
-export type Page = 'dashboard' | 'billing' | 'menus' | 'today' | 'history' | 'printer';
+export type Page = 'dashboard' | 'billing' | 'menus' | 'today' | 'history' | 'printer' | 'profile';
+export type BusinessHour = { day_of_week: number; is_closed: number; opening_time: string | null; closing_time: string | null };
+export type BusinessProfile = { name: string; owner_name: string; phone: string; address_line_1: string; address_line_2: string; city: string; state: string; zip_code: string; default_tax_rate_bps: number; hours: BusinessHour[] };
+export type DashboardInsights = { weeklySales: { date: string; orders: number; revenue_cents: number }[]; topItems: { name: string; category: string; quantity: number; revenue_cents: number }[] };
 export type OrderType = 'DINE_IN' | 'TAKEAWAY';
 export type OrderSource = 'POS' | 'PHONE';
 export type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'OTHER';
