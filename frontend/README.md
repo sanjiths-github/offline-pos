@@ -128,7 +128,7 @@ Printer Connection lists receipt printer queues installed in Windows, including 
 
 ## Client notifications and updates
 
-Create Markdown announcements in `frontend/notifications/` using the front matter documented in `frontend/notifications/README.md`. The navbar bell shows the latest five, and the history view shows all received notices. `npm run notifications:build` bundles only notices addressed to this build's `clientId` or `all-clients`. The app also checks a remote feed every five minutes when configured and caches the last successful response for offline viewing.
+Create Markdown announcements in `frontend/notifications/` using the front matter documented in `frontend/notifications/README.md`. The navbar bell shows the unread count and latest five notices; View All shows the complete received history. Opening a notice marks it read for that user on this computer. `npm run notifications:build` bundles only notices addressed to this build's `clientId` or `all-clients`. The desktop loads bundled and cached notices at startup. Press the refresh icon beside the bell to check the selected client's remote feed. New notices show a temporary in-app alert. The last successful feed remains available offline; there is no background notification polling or WebSocket connection.
 
 For automatic delivery, the client profile must contain these fields **before building the installer**. Downtown Coffee House and Pizza Hut profiles now point to the public downloads-only repository:
 

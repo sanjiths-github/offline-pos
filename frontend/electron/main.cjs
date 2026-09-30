@@ -81,19 +81,23 @@ async function checkForUpdate(download) {
   finally { updateTask = null; }
 }
 
-async function readNotifications() {
+async function readNotifications(refresh = false) {
   const bundledPath = path.join(__dirname, '..', 'assets', 'generated', 'notifications.json');
   const cachePath = path.join(stableUserDir, 'notifications-cache.json');
   let payload = fs.existsSync(bundledPath) ? JSON.parse(fs.readFileSync(bundledPath, 'utf8')) : { notifications: [] };
   if (fs.existsSync(cachePath)) {
     try {
       const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-      if (cached.clientId === client.clientId && Array.isArray(cached.notifications)) payload = cached;
+      if (cached.clientId === client.clientId && Array.isArray(cached.notifications)) {
+        const merged = new Map([...(payload.notifications || []), ...cached.notifications].map(item => [item.id, item]));
+        payload = { clientId: client.clientId, notifications: [...merged.values()] };
+      }
     } catch (error) { console.error('[POS notification cache]', error); }
   }
-  if (client.notificationFeedUrl) {
+  if (refresh && client.notificationFeedUrl) {
     try {
       const url = clientFeedUrl(client.notificationFeedUrl);
+      url.searchParams.set('checked', String(Date.now()));
       const response = await fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
       if (!response.ok) throw new Error(`Notification feed returned ${response.status}`);
       const raw = await response.text();
@@ -102,14 +106,26 @@ async function readNotifications() {
       if (remote.clientId !== client.clientId || !Array.isArray(remote.notifications)) throw new Error('Notification feed belongs to another client');
       payload = remote;
       try { fs.writeFileSync(cachePath, raw); } catch (error) { console.error('[POS notification cache]', error); }
-    } catch (error) { console.error('[POS notifications]', error); }
+    } catch (error) { console.error('[POS notifications]', error); throw error; }
   }
   return (payload.notifications || []).filter(item =>
     item && typeof item.id === 'string' && typeof item.heading === 'string' &&
     typeof item.description === 'string' && typeof item.date === 'string' &&
     typeof item.content === 'string' &&
     (item.targetClient === client.clientId || item.targetClient === 'all-clients')
-  ).slice(0, 100);
+  );
+}
+
+const notificationReadPath = path.join(stableUserDir, 'notification-read.json');
+function notificationReadState() {
+  try {
+    const state = JSON.parse(fs.readFileSync(notificationReadPath, 'utf8'));
+    return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
+  } catch { return {}; }
+}
+function notificationUserKey(userId) {
+  if (!Number.isSafeInteger(userId) || userId < 1) throw new Error('Invalid notification user');
+  return String(userId);
 }
 
 function availablePort() {
@@ -205,7 +221,18 @@ ipcMain.handle('pos:bluetooth-cancel', () => {
   return { ok: true };
 });
 ipcMain.handle('pos:open-bluetooth-settings', () => shell.openExternal('ms-settings:bluetooth'));
-ipcMain.handle('pos:notifications', () => readNotifications());
+ipcMain.handle('pos:notifications', (_event, refresh) => readNotifications(refresh === true));
+ipcMain.handle('pos:notification-read-get', (_event, userId) => {
+  const ids = notificationReadState()[notificationUserKey(userId)];
+  return Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : [];
+});
+ipcMain.handle('pos:notification-read-save', (_event, userId, ids) => {
+  if (!Array.isArray(ids) || ids.length > 10_000 || ids.some(id => typeof id !== 'string' || id.length > 160)) throw new Error('Invalid notification read state');
+  const state = notificationReadState();
+  state[notificationUserKey(userId)] = [...new Set(ids)];
+  fs.writeFileSync(notificationReadPath, JSON.stringify(state));
+  return { ok: true };
+});
 ipcMain.handle('pos:update-state', () => updateState);
 ipcMain.handle('pos:update-start', () => checkForUpdate(true));
 ipcMain.handle('pos:update-install', () => {
