@@ -2,6 +2,7 @@ const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { db } = require('./db');
 const { deviceDateTime } = require('./deviceTime');
+const { listCupsPrinters, printCups } = require('./cupsPrinter');
 const money = cents => '$'+(cents/100).toFixed(2);
 function renderReceipt(sale) {
   const business=db.prepare('SELECT * FROM businesses WHERE id=1').get();
@@ -23,9 +24,10 @@ class NetworkPrinterAdapter {
 }
 class SystemPrinterAdapter {
   static print(settings,text) {
-    if(process.platform!=='win32')throw new Error('System printing currently requires Windows');
     const name=settings.device_identifier||settings.name;
-    if(!name)throw new Error('Windows printer name is required');
+    if(!name)throw new Error('Printer name is required');
+    if(process.platform==='darwin'||process.platform==='linux')return printCups(name,text);
+    if(process.platform!=='win32')throw new Error('Printing is unsupported on this operating system');
     return new Promise((resolve,reject)=>{
       const script="$ErrorActionPreference='Stop'; $text=[Console]::In.ReadToEnd(); $text | Out-Printer -Name $env:POS_PRINTER_NAME";
       const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,env:{...process.env,POS_PRINTER_NAME:name}});
@@ -39,6 +41,7 @@ class USBPrinterAdapter extends SystemPrinterAdapter {}
 class BluetoothPrinterAdapter extends SystemPrinterAdapter {}
 const adapters={NETWORK:NetworkPrinterAdapter,USB:USBPrinterAdapter,BLUETOOTH:BluetoothPrinterAdapter,SYSTEM:SystemPrinterAdapter};
 function listSystemPrinters() {
+  if(process.platform==='darwin'||process.platform==='linux')return listCupsPrinters();
   if(process.platform!=='win32')return Promise.resolve([]);
   return new Promise((resolve,reject)=>{
     const script="$ErrorActionPreference='Stop'; Get-Printer | Select-Object Name,PortName,DriverName,@{Name='Status';Expression={$_.PrinterStatus.ToString()}} | ConvertTo-Json -Compress -Depth 3";

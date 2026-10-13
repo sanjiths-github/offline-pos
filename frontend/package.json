@@ -1,6 +1,6 @@
 {
   "name": "offline-pos-desktop",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "description": "Offline POS desktop dashboard",
   "main": "electron/main.cjs",
   "scripts": {
@@ -18,7 +18,17 @@
     "desktop:dev": "concurrently -k \"npm:dev\" \"wait-on http://127.0.0.1:3000 && node scripts/run-electron.cjs\"",
     "desktop:pack": "npm run client:check && npm run build && electron-builder --config electron-builder.config.cjs --dir",
     "desktop:dist": "npm run client:check && npm run build && electron-builder --config electron-builder.config.cjs --publish never && node scripts/write-release-manifest.cjs",
+    "desktop:dist:mac": "node scripts/require-platform.cjs darwin && npm run desktop:dist",
+    "desktop:dist:linux": "node scripts/require-platform.cjs linux && npm run desktop:dist",
+    "mobile:build": "npm run client:check && node scripts/build-mobile.cjs",
+    "mobile:android:add": "npm run mobile:build && cap add android",
+    "mobile:android:sync": "npm run mobile:build && cap sync android",
+    "mobile:android:open": "node scripts/write-capacitor-config.cjs && cap open android",
+    "mobile:ios:add": "npm run mobile:build && cap add ios",
+    "mobile:ios:sync": "npm run mobile:build && cap sync ios",
+    "mobile:ios:open": "node scripts/write-capacitor-config.cjs && cap open ios",
     "typecheck": "tsc --noEmit",
+    "test:mobile": "tsx --test test/mobile-store.test.ts",
     "test": "node --test test/*.test.cjs"
   },
   "keywords": [],
@@ -26,7 +36,13 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/preferences": "^8.0.1",
+    "bcryptjs": "^3.0.3",
     "electron-updater": "^6.8.9",
+    "idb": "^8.0.3",
     "lucide-react": "^1.48.0",
     "next": "^16.3.7",
     "react": "^19.3.0",
@@ -34,15 +50,17 @@
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "bcryptjs": "^3.0.3",
     "concurrently": "^10.0.5",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
+    "fake-indexeddb": "^6.2.5",
     "png-to-ico": "^3.0.2",
     "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "wait-on": "^9.4.0"
   }

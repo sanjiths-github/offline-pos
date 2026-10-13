@@ -126,9 +126,38 @@ The Electron renderer uses a restricted preload bridge to call the Express API. 
 
 ### Device date and time
 
-The POS reads the date, time, and timezone from the computer running it. The navbar clock, Today's Sales, day-period filters, reports, receipt dates, and daily backup schedule follow that computer's local time. Sale timestamps remain stored in UTC in SQLite so older records are not rewritten when the device timezone changes; the app converts them for display and filtering. Make sure Windows date, time, and timezone are set correctly on each client's computer. These source changes must be included in a new desktop installer before an installed client sees them.
+The POS reads the date, time, and timezone from the computer running it. The navbar clock, Today's Sales, day-period filters, reports, receipt dates, and daily backup schedule follow that computer's local time. Sale timestamps remain stored in UTC in SQLite so older records are not rewritten when the device timezone changes; the app converts them for display and filtering. Make sure the date, time, and timezone are set correctly on each client's computer. These source changes must be included in a new desktop installer before an installed client sees them.
 
-Printer Connection lists receipt printer queues installed in Windows, including USB cable and paired Bluetooth printers. Choose one, connect it to the POS, and use Test Print. Disconnect stops the POS from sending new receipts; it does not uninstall the Windows printer. The nearby Bluetooth scan in Electron uses Web Bluetooth for discoverable Bluetooth LE devices. Classic Bluetooth printers may only appear after pairing in Windows. In both cases Windows must expose a printer queue before the POS can print; printer drivers and pairing are managed by Windows. Windows queue status is shown on the page, but a successful Test Print is the practical connection check.
+Printer Connection lists receipt printer queues installed in the operating system, including USB cable and paired Bluetooth printers. Windows uses its printer queues; macOS and Linux use CUPS (`lpstat` for discovery and `lp` for printing). Choose a queue, connect it to the POS, and use Test Print. Disconnect stops the POS from sending new receipts; it does not remove the system printer. The nearby Bluetooth scan in Electron uses Web Bluetooth for discoverable Bluetooth LE devices. Classic Bluetooth printers may only appear after pairing in the operating system. A working system printer queue is required before the POS can print; the queue status is informational, while a successful Test Print is the practical connection check.
+
+### macOS and Linux desktop builds
+
+The Next.js frontend, bundled local Node.js backend, and per-client SQLite database run inside Electron on Windows, macOS, and Linux. Build each installer on its native operating system with Node.js 22.13 or newer. Install dependencies in both `backend` and `frontend` with `npm ci`, select the same client ID, and securely transfer that client's provisioning manifest to `frontend/provisioning/` if it was prepared on another developer computer. Never put provisioning manifests, the developer key, or credential files in GitHub.
+
+On macOS, run `npm run desktop:dist:mac` from `frontend`. It creates a DMG for first installation and a ZIP build in `release/<clientId>/macos/latest-version/`. For normal distribution to other Macs, sign and notarize the app with an Apple Developer ID. On Linux, install and enable CUPS for receipt printing, then run `npm run desktop:dist:linux`. It creates an AppImage in `release/<clientId>/linux/latest-version/`. Make the downloaded AppImage executable before running it. The same `npm run desktop:dev` command can be used for local testing on either operating system.
+
+These native builds can be installed and used offline. The current `push-client` GitHub software-update publisher and in-app auto-updater are configured for Windows NSIS installers only. Windows software-update notices are hidden in the macOS and Linux apps; ordinary announcements remain available. Until platform-specific release feeds and signing are configured, deliver a newly built DMG or AppImage to those clients for a manual update. Their database stays under Electron's per-user application-data directory, outside the app package, so replacing the app does not replace normal local POS data. Verify this with a backup and an update test on each platform before distribution.
+
+### Build Mac and Linux installers from a Windows PC
+
+The manual [GitHub Actions workflow](../.github/workflows/desktop-cross-platform.yml) runs the Linux build on Ubuntu and the Mac builds on Apple Silicon and Intel runners. Your Windows PC only needs to push the source and start the workflow. The workflow uploads separate installer artifacts for the selected client. It never publishes them to the public updates repository.
+
+1. Make `pos-system-offline` a **private** GitHub repository. The workflow refuses to build in a public source repository because each installer contains that client's provisioning hashes. Keep `pos-system-updates` public for the existing Windows notification/update feeds.
+2. In the private source repository, create a GitHub **Environment** named exactly like each client ID (for example `downtown-coffee-house` and `pizza-hut`). Give each environment a secret named `POS_PROVISIONING_B64` containing that client's existing `frontend/provisioning/<client-id>.json`, encoded as base64. Do not run `client:prepare` again or put the file in Git. From Windows PowerShell with GitHub CLI:
+
+   ```powershell
+   $repo = 'sanjuconnectrader/pos-system-offline'
+   $clientId = 'downtown-coffee-house'
+   $manifest = Join-Path 'C:\pos-application\frontend\provisioning' "$clientId.json"
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes($manifest)) | gh secret set POS_PROVISIONING_B64 -R $repo -e $clientId
+   ```
+
+   Repeat with `$clientId = 'pizza-hut'` for Pizza Hut. The saved temporary password and developer reset key remain on your developer PC. The workflow needs only the provisioning manifest; it does not need the plaintext passwords.
+3. For Mac distribution, add repository Actions secrets `MAC_CSC_LINK` (base64 Developer ID Application `.p12`), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`. An Apple Developer ID and notarization credentials are needed for a Mac installer that customers can open normally. The workflow fails rather than uploading an unsigned Mac installer if these secrets are missing.
+4. Push this workflow and application code to the private source repository. In GitHub, open **Actions → Build desktop installers → Run workflow**, enter the client ID, and choose `linux`, `macos`, or `both`. Or run `gh workflow run desktop-cross-platform.yml -R sanjuconnectrader/pos-system-offline -f client_id=downtown-coffee-house -f platform=both` from PowerShell.
+5. When the run finishes, open that run's **Artifacts** section. Download the matching `*-linux-x64`, `*-macos-arm64`, or `*-macos-x64` ZIP to your Windows PC. Extract it and send the `.AppImage` to Linux clients or the `.dmg` to Mac clients. The Mac ZIP is included for a future update feed; the DMG is the customer installer. The client does not need GitHub access. Linux users must make the AppImage executable (`chmod +x filename.AppImage`) before running it.
+
+Select one client per workflow run; repeat for another client. Do not send one client's installer to another client. These Mac/Linux builds currently use manual distribution for new versions; the Windows in-app update button does not update Mac or Linux installations.
 
 ## Client notifications and updates
 

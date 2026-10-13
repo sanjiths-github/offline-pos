@@ -1,0 +1,45 @@
+name: Publish mobile preview update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile-applcation/**'
+      - '.github/workflows/mobile-preview-update.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-preview-update
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile-applcation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile-applcation/package-lock.json
+      - name: Install mobile dependencies
+        run: npm ci
+      - name: Check mobile code
+        run: |
+          npx tsc --noEmit
+          npm run lint
+      - uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Publish Android and iOS preview update
+        run: eas update --channel preview --platform all --environment preview --message "Preview ${GITHUB_SHA}" --non-interactive

@@ -1,4 +1,6 @@
 import type { Session } from './types';
+import { Capacitor } from '@capacitor/core';
+import { mobileRequest } from './mobile-store';
 
 declare global {
   interface Window { posDesktop?: { request: (path: string, method?: string, body?: unknown, token?: string) => Promise<unknown>; platform: string; onBluetoothDevices?: (callback: (devices: { id: string; name: string }[]) => void) => () => void; selectBluetoothDevice?: (id: string) => Promise<unknown>; cancelBluetoothScan?: () => Promise<unknown>; openBluetoothSettings?: () => Promise<unknown>; notifications?: (refresh?: boolean) => Promise<unknown>; notificationReadIds?: (userId: number) => Promise<string[]>; saveNotificationReadIds?: (userId: number, ids: string[]) => Promise<unknown>; notificationHiddenIds?: (userId: number) => Promise<string[]>; saveNotificationHiddenIds?: (userId: number, ids: string[]) => Promise<unknown>; updateState?: () => Promise<unknown>; startUpdate?: () => Promise<unknown>; installUpdate?: () => Promise<unknown>; onUpdateState?: (callback: (state: unknown) => void) => () => void } }
@@ -6,6 +8,7 @@ declare global {
 
 export async function api<T>(path: string, method = 'GET', body?: unknown, token?: string): Promise<T> {
   if (typeof window !== 'undefined' && window.posDesktop) return window.posDesktop.request(path, method, body, token) as Promise<T>;
+  if (Capacitor.isNativePlatform()) return mobileRequest<T>(path, method, body, token);
   const response = await fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));

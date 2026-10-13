@@ -267,7 +267,7 @@ route('get','/printer/devices',authenticate,working,async(req,res)=>send(res,awa
 route('post','/printer/connect',authenticate,admin,async(req,res)=>{
   const name=required(req.body.name,'name');
   const available=(await listSystemPrinters()).find(item=>item.name===name);
-  if(!available)fail('Printer is not installed in Windows. Pair or connect it in Windows settings first.',404);
+  if(!available)fail('Printer is not installed in this operating system. Pair or connect it in system settings first.',404);
   const width=enumValue(req.body.receiptWidth||80,[58,80],'receiptWidth');
   const item=transaction(()=>{
     db.prepare('UPDATE printer_settings SET is_active=0').run();

@@ -6,6 +6,9 @@ release-feeds/
 assets/generated/
 public/branding/
 public/notifications.json
+public/mobile-provisioning.json
+mobile-native/
+capacitor.config.json
 branding/*.key
 provisioning/*.json
 private/

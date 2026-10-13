@@ -125,6 +125,7 @@ async function readNotifications(refresh = false) {
     item && typeof item.id === 'string' && typeof item.heading === 'string' &&
     typeof item.description === 'string' && typeof item.date === 'string' &&
     typeof item.content === 'string' &&
+    (!item.updateAvailable || process.platform === 'win32') &&
     (item.targetClient === client.clientId || item.targetClient === 'all-clients')
   );
 }
@@ -240,7 +241,24 @@ ipcMain.handle('pos:bluetooth-cancel', () => {
   bluetoothSelection = null;
   return { ok: true };
 });
-ipcMain.handle('pos:open-bluetooth-settings', () => shell.openExternal('ms-settings:bluetooth'));
+ipcMain.handle('pos:open-bluetooth-settings', async () => {
+  if (process.platform === 'win32') return shell.openExternal('ms-settings:bluetooth');
+  if (process.platform === 'darwin') return shell.openExternal('x-apple.systempreferences:com.apple.Bluetooth');
+  if (process.platform === 'linux') {
+    for (const [file, args] of [['blueman-manager', []], ['gnome-control-center', ['bluetooth']], ['systemsettings6', ['kcm_bluetooth']]]) {
+      try {
+        await new Promise((resolve, reject) => {
+          const child = spawn(file, args, { detached: true, stdio: 'ignore' });
+          child.once('error', reject);
+          child.once('spawn', () => { child.unref(); resolve(); });
+        });
+        return { ok: true };
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    throw new Error('Open Bluetooth settings from your Linux desktop environment.');
+  }
+  throw new Error('Bluetooth settings are unavailable on this operating system.');
+});
 ipcMain.handle('pos:notifications', (_event, refresh) => readNotifications(refresh === true));
 ipcMain.handle('pos:notification-read-get', (_event, userId) => {
   const ids = notificationReadState()[notificationUserKey(userId)];

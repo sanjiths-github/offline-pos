@@ -3,7 +3,8 @@ const path = require('node:path');
 const client = require('../branding/client.json');
 const { version } = require('../package.json');
 if (!/^[a-z0-9-]{3,50}$/.test(client.clientId)) throw new Error('Invalid client ID');
-const directory = path.join(__dirname, '..', 'release', client.clientId, 'latest-version');
+const platformFolder = process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : null;
+const directory = path.join(__dirname, '..', 'release', client.clientId, ...(platformFolder ? [platformFolder] : []), 'latest-version');
 const output = path.join(directory, 'release.json');
 if (process.platform === 'win32') {
   const expected = `${client.appName || client.name} Setup ${version}.exe`;
@@ -19,9 +20,19 @@ if (process.platform === 'win32') {
     fs.unlinkSync(path.join(directory, entry.name));
   }
 }
+if (process.platform === 'darwin' || process.platform === 'linux') {
+  const required = process.platform === 'darwin' ? ['.dmg', '.zip'] : ['.AppImage'];
+  const files = fs.existsSync(directory) ? fs.readdirSync(directory) : [];
+  for (const extension of required) {
+    if (!files.some(name => name.includes(version) && name.endsWith(extension))) {
+      throw new Error(`Current ${extension} build not found in ${directory}`);
+    }
+  }
+}
 const data = {
   clientId: client.clientId,
   version,
+  platform: process.platform,
   appId: `com.localpos.${client.clientId.replaceAll('-', '')}`
 };
 fs.mkdirSync(directory, { recursive: true });

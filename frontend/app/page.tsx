@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Building2, CalendarDays, Clock3, Coffee, History, LayoutDashboard, LogOut, Menu as MenuIcon, Printer, Search, ShoppingCart } from 'lucide-react';
 import Dashboard from '@/components/dashboard';
 import Billing from '@/components/billing';
@@ -40,10 +41,15 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [mobileSidebar, setMobileSidebar] = useState(false);
+  const [mobileApp, setMobileApp] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [developerKey, setDeveloperKey] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
   const [clock, setClock] = useState<Date | null>(null);
   const lastBusinessDay = useRef<string | null>(null);
 
   useEffect(() => {
+    setMobileApp(Capacitor.isNativePlatform());
     setClock(new Date());
     const timer = window.setInterval(() => setClock(new Date()), 30_000);
     return () => window.clearInterval(timer);
@@ -110,6 +116,16 @@ export default function Home() {
     finally { setBusy(false); }
   }
 
+  async function developerReset(event: React.FormEvent) {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      await api('/auth/developer-reset', 'POST', { username: username.trim(), developerKey, temporaryPassword: resetPassword });
+      setDeveloperKey(''); setResetPassword(''); setPassword(''); setResetMode(false);
+      setError('Password reset. Sign in with the new temporary password, then create your own password.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not reset password.'); }
+    finally { setBusy(false); }
+  }
+
   async function changePassword(event: React.FormEvent) {
     event.preventDefault(); if (!session) return;
     setError(''); setBusy(true);
@@ -139,26 +155,27 @@ export default function Home() {
   if (status !== 'ready' || !session) return <div className="auth-screen">
     <div className="auth-card">
       <div className="auth-logo"><img src="./branding/logo.png" alt="Client logo" onError={event => { event.currentTarget.style.display = 'none'; }} /><Coffee size={25} /></div>
-      <div className="auth-eyebrow">LOCAL DESKTOP POS</div>
-      <h1>{status === 'change' ? 'Create your password' : `Welcome to ${brand.name}`}</h1>
-      <p>{status === 'change' ? 'Replace the temporary password before using the register.' : 'Sign in with the account provided by your administrator.'}</p>
-      {status === 'loading' ? <div className="auth-loading">Loading your local workspace…</div> : <form onSubmit={status === 'change' ? changePassword : signIn}>
-        {status === 'login' && <label className="form-field">Username<input autoFocus autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required /></label>}
-        <label className="form-field">{status === 'change' ? 'Temporary password' : 'Password'}<input autoFocus={status === 'change'} autoComplete="current-password" type="password" value={password} onChange={event => setPassword(event.target.value)} required /></label>
-        {status === 'change' && <><label className="form-field">New password<input type="password" autoComplete="new-password" minLength={10} maxLength={128} value={newPassword} onChange={event => setNewPassword(event.target.value)} required /></label><label className="form-field">Confirm new password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required /></label></>}
+      <div className="auth-eyebrow">LOCAL {mobileApp ? 'MOBILE' : 'DESKTOP'} POS</div>
+      <h1>{resetMode ? 'Developer password reset' : status === 'change' ? 'Create your password' : `Welcome to ${brand.name}`}</h1>
+      <p>{resetMode ? 'Enter the developer key and a new temporary password on this device.' : status === 'change' ? 'Replace the temporary password before using the register.' : 'Sign in with the account provided by your administrator.'}</p>
+      {status === 'loading' ? <div className="auth-loading">Loading your local workspace…</div> : <form onSubmit={resetMode ? developerReset : status === 'change' ? changePassword : signIn}>
+        {resetMode && <><label className="form-field">Username<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required /></label><label className="form-field">Developer key<input type="password" autoComplete="off" value={developerKey} onChange={event => setDeveloperKey(event.target.value)} required /></label><label className="form-field">New temporary password<input type="password" autoComplete="new-password" minLength={10} maxLength={128} value={resetPassword} onChange={event => setResetPassword(event.target.value)} required /></label></>}
+        {!resetMode && status === 'login' && <label className="form-field">Username<input autoFocus autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required /></label>}
+        {!resetMode && <label className="form-field">{status === 'change' ? 'Temporary password' : 'Password'}<input autoFocus={status === 'change'} autoComplete="current-password" type="password" value={password} onChange={event => setPassword(event.target.value)} required /></label>}
+        {!resetMode && status === 'change' && <><label className="form-field">New password<input type="password" autoComplete="new-password" minLength={10} maxLength={128} value={newPassword} onChange={event => setNewPassword(event.target.value)} required /></label><label className="form-field">Confirm new password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required /></label></>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="primary-button auth-submit" disabled={busy}>{busy ? 'Please wait…' : status === 'change' ? 'Save new password' : 'Sign in'}</button>
+        <button className="primary-button auth-submit" disabled={busy}>{busy ? 'Please wait…' : resetMode ? 'Reset password' : status === 'change' ? 'Save new password' : 'Sign in'}</button>
       </form>}
-      <div className="auth-note">{status === 'change' ? 'Your new password must have at least 10 characters.' : 'Forgot your password? Contact your developer for a reset.'}</div>
+      <div className="auth-note">{status === 'change' ? 'Your new password must have at least 10 characters.' : mobileApp && status === 'login' ? <button type="button" className="auth-reset-link" onClick={() => { setError(''); setResetMode(value => !value); }}>{resetMode ? 'Back to sign in' : 'Developer reset'}</button> : 'Forgot your password? Contact your developer for a reset.'}</div>
     </div>
-    <div className="auth-footer">Your business data stays on this computer.</div>
+    <div className="auth-footer">Your business data stays on this {mobileApp ? 'device' : 'computer'}.</div>
   </div>;
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileSidebar ? 'open' : ''}`}>
       <div className="brand-block"><div className="brand-top"><img src="./branding/logo.png" alt="Client logo" onError={event => { event.currentTarget.style.display = 'none'; }} /><div className="brand-copy"><strong title={displayName}>{displayName}</strong><small title={brand.tagline}>{brand.tagline}</small></div></div></div>
       <div className="sidebar-section-label">WORKSPACE</div>
-      <nav className="sidebar-nav" aria-label="Main navigation">{navigation.map(({ id, label, Icon }) => <button key={id} onClick={() => navigate(id)} className={page === id ? 'active' : ''}><Icon size={21} strokeWidth={2.1} /><span>{label}</span></button>)}</nav>
+      <nav className="sidebar-nav" aria-label="Main navigation">{navigation.filter(item => !mobileApp || item.id !== 'printer').map(({ id, label, Icon }) => <button key={id} onClick={() => navigate(id)} className={page === id ? 'active' : ''}><Icon size={21} strokeWidth={2.1} /><span>{label}</span></button>)}</nav>
       <div className="clean-sidebar-footer"><button onClick={signOut}><LogOut size={18} /> Log out</button></div>
     </aside>
     {mobileSidebar && <div className="mobile-scrim" onClick={() => setMobileSidebar(false)} />}
@@ -166,8 +183,8 @@ export default function Home() {
       <header className="topbar"><div className="header-left"><button className="mobile-menu" onClick={() => setMobileSidebar(true)} aria-label="Open menu"><MenuIcon size={22} /></button><div className="heading"><h1>{page === 'dashboard' ? greeting : title[page]}</h1><p>{page === 'dashboard' ? dateLabel : displayName}</p></div></div><div className="header-right"><div className="global-search"><Search size={18} /><input placeholder="Search menu items…" value={globalSearch} onChange={event => { setGlobalSearch(event.target.value); if (event.target.value) setPage('menus'); }} /></div><div className="clean-clock"><Clock3 size={17} /><span>{timeLabel}</span></div><NotificationCenter clientId={clientBrand.clientId} userId={session.user.id} /><span className="clean-user" title={session.user.username}><span className="avatar">{session.user.username.slice(0, 1).toUpperCase()}</span><span>{session.user.username}</span></span></div></header>
       <main className="content">
         {page === 'dashboard' && <Dashboard report={report} sales={sales} products={products} insights={insights} onBilling={() => navigate('billing')} onMenus={() => navigate('menus')} onToday={() => navigate('today')} onHistory={() => navigate('history')} />}
-        {page === 'billing' && <Billing categories={categories} products={products} token={session.token} profile={businessProfile} taxRateBps={taxRateBps} onComplete={completed} />}
-        {(page === 'today' || page === 'history') && <Sales token={session.token} todayOnly={page === 'today'} />}
+        {page === 'billing' && <Billing categories={categories} products={products} token={session.token} profile={businessProfile} taxRateBps={taxRateBps} onComplete={completed} mobileApp={mobileApp} />}
+        {(page === 'today' || page === 'history') && <Sales token={session.token} todayOnly={page === 'today'} mobileApp={mobileApp} />}
         {page === 'printer' && <PrinterConnection token={session.token} canEdit={session.user.role === 'BUSINESS_ADMIN'} onChange={() => refresh(session).catch(() => {})} />}
         {page === 'menus' && <Menus categories={categories} products={products} token={session.token} demo={false} canEdit={session.user.role === 'BUSINESS_ADMIN'} initialSearch={globalSearch} onCategories={setCategories} onProducts={setProducts} />}
         {page === 'profile' && businessProfile && <BusinessProfilePage profile={businessProfile} token={session.token} canEdit={session.user.role === 'BUSINESS_ADMIN'} onSaved={setBusinessProfile} />}

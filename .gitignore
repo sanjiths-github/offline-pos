@@ -1,4 +1,5 @@
 **/node_modules/
+**/build/
 frontend/.next/
 frontend/out/
 frontend/release*/
